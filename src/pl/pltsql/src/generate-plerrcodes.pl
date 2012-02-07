@@ -32,7 +32,7 @@ while (<$errcodes>) {
     # Skip non-errors
     next unless $type eq 'E';
 
-    # Skip lines without PL/pgSQL condition names
+    # Skip lines without PL/TSQL condition names
     next unless defined($condition_name);
 
     print "{\n\t\"$condition_name\", $errcode_macro\n},\n\n";

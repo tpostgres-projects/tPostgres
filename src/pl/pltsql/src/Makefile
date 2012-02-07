@@ -1,17 +1,17 @@
 #-------------------------------------------------------------------------
 #
-# Makefile for the pl/pgsql procedural language
+# Makefile for the pl/tsql procedural language
 #
-# src/pl/plpgsql/src/Makefile
+# src/pl/pltsql/src/Makefile
 #
 #-------------------------------------------------------------------------
 
-subdir = src/pl/plpgsql/src
+subdir = src/pl/pltsql/src
 top_builddir = ../../../..
 include $(top_builddir)/src/Makefile.global
 
 # Shared library parameters
-NAME= plpgsql
+NAME= pltsql
 
 override CPPFLAGS := -I. -I$(srcdir) $(CPPFLAGS)
 SHLIB_LINK = $(filter -lintl, $(LIBS))
@@ -19,7 +19,7 @@ rpath =
 
 OBJS = pl_gram.o pl_handler.o pl_comp.o pl_exec.o pl_funcs.o pl_scanner.o
 
-DATA = plpgsql.control plpgsql--1.0.sql plpgsql--unpackaged--1.0.sql
+DATA = pltsql.control pltsql--1.0.sql pltsql--unpackaged--1.0.sql
 
 all: all-lib
 
@@ -44,7 +44,7 @@ uninstall-data:
 
 
 # Force these dependencies to be known even without dependency info built:
-pl_gram.o pl_handler.o pl_comp.o pl_exec.o pl_funcs.o pl_scanner.o: plpgsql.h pl_gram.h plerrcodes.h
+pl_gram.o pl_handler.o pl_comp.o pl_exec.o pl_funcs.o pl_scanner.o: pltsql.h pl_gram.h plerrcodes.h
 
 # See notes in src/backend/parser/Makefile about the following two rules
 
