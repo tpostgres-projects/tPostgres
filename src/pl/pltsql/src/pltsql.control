@@ -4,4 +4,4 @@ default_version = '1.0'
 module_pathname = '$libdir/pltsql'
 relocatable = false
 schema = pg_catalog
-superuser = false
+superuser = true
