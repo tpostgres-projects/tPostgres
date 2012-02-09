@@ -116,6 +116,7 @@ test: plancache
 test: limit
 test: plpgsql
 test: pltsql_print
+test: pltsql_plpgsqlsubset
 test: copy2
 test: temp
 test: domain
