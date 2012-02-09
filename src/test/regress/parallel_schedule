@@ -101,5 +101,10 @@ test: select_views portals_p2 foreign_key cluster dependency guc bitmapops combo
 # ----------
 test: plancache limit plpgsql copy2 temp domain rangefuncs prepare without_oid conversion truncate alter_table sequence polymorphism rowtypes returning largeobject with xml
 
+# ----------
+# Group of pltsql parallel tests
+# ----------
+test: pltsql_print
+
 # run stats by itself because its delay may be insufficient under heavy load
 test: stats

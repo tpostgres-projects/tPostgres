@@ -115,6 +115,7 @@ test: json
 test: plancache
 test: limit
 test: plpgsql
+test: pltsql_print
 test: copy2
 test: temp
 test: domain
