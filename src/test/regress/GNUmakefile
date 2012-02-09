@@ -133,6 +133,7 @@ tablespace-setup:
 ##
 
 REGRESS_OPTS = --dlpath=. $(EXTRA_REGRESS_OPTS)
+REGRESS_OPTS += --load-extension=pltsql
 
 check: all tablespace-setup
 	$(pg_regress_check) $(REGRESS_OPTS) --schedule=$(srcdir)/parallel_schedule $(MAXCONNOPT) $(TEMP_CONF) $(EXTRA_TESTS)
