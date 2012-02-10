@@ -1,6 +1,6 @@
 #-------------------------------------------------------------------------
 #
-# Makefile for src/pl/pltsql (A procedural language compatible with T-SQL)
+# Makefile for src/pl/pltsql (TSQL-compatible procedural language)
 #
 # Copyright (c) 1994, Regents of the University of California
 # Copyright (c) 2011-2012 OpenSCG, Inc.  All rights reserved.
