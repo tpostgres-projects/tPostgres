@@ -214,7 +214,7 @@ static	List			*read_raise_options(void);
 %type <fetch>	opt_fetch_direction
 
 %type <keyword>	unreserved_keyword
-
+%type <stmt>	stmt_print
 
 /*
  * Basic non-keyword token types.  These are hard-wired into the core lexer.
@@ -327,6 +327,7 @@ static	List			*read_raise_options(void);
 %token <keyword>	K_WARNING
 %token <keyword>	K_WHEN
 %token <keyword>	K_WHILE
+%token <keyword>	K_PRINT
 
 %%
 
@@ -794,6 +795,8 @@ proc_stmt		: pl_block ';'
 				| stmt_return
 						{ $$ = $1; }
 				| stmt_raise
+						{ $$ = $1; }
+				| stmt_print
 						{ $$ = $1; }
 				| stmt_execsql
 						{ $$ = $1; }
@@ -1735,6 +1738,53 @@ stmt_raise		: K_RAISE
 							if (tok == K_USING)
 								new->options = read_raise_options();
 						}
+
+						$$ = (PLTSQL_stmt *)new;
+					}
+				;
+
+stmt_print		: K_PRINT
+					{
+						PLTSQL_stmt_raise		*new;
+						int	tok;
+
+						new = palloc(sizeof(PLTSQL_stmt_raise));
+
+						new->cmd_type	= PLTSQL_STMT_RAISE;
+						new->lineno		= pltsql_location_to_lineno(@1);
+						/*
+						 * Of all the message levels that are usually visible to
+						 * clients, INFO is the least likely to be configured to
+						 * show up in the server logs.
+						 */
+						new->elog_level = INFO;
+						new->condname	= NULL;
+						new->message	= NULL;
+						new->params		= NIL;
+						new->options	= NIL;
+
+						tok = yylex();
+						if (tok == 0)
+							yyerror("unexpected end of function definition");
+
+						if (tok == ';')
+							yyerror("Incorrect syntax");
+
+						/*
+						 * We expect only one parameter: either a string
+						 * literal, a local variable or a global variable.
+						 *
+						 * We support the string literal subset presently.
+						 */
+						if (tok == SCONST)
+							new->message = yylval.str;
+
+                        /*
+                         * Make semicolon statement termination optional.
+                         */
+                        tok = yylex();
+                        if (tok != ';')
+                           pltsql_push_back_token(tok);
 
 						$$ = (PLTSQL_stmt *)new;
 					}
