@@ -324,6 +324,68 @@ pltsql_yylex(void)
 	}
 	else
 	{
+		/*
+		 * Handle "@"-prefixed identifiers specific to TSQL.
+		 *
+		 * The core scanner treats "@" as an operator, we do not intend to
+		 * modify the core scanner for one language especially when in addition
+		 * to increasing the delta, this can cause regressions.  This is a
+		 * genuine conflict as the "@" (Absolute Value) operator is unary.
+		 *
+		 * TSQL does not support this unary operator, and instead, relies on the
+		 * ABS() function that we support already.
+		 */
+		if (tok1 == Op)
+		{
+			/*
+			 * Make sure we are resilient to the core scanner returning multiple
+			 * operators as a single Op token.
+			 */
+			if (aux1.leng > 1 && aux1.lval.str[aux1.leng - 1] == '@')
+			{
+				int			 tok2;
+				TokenAuxData aux2;
+
+				/* Separate out "@" and push it back. */
+				tok2 = Op;
+				aux2.lval.str = "@";
+				aux2.leng = 1;
+				aux2.lloc = aux1.lloc + (aux1.leng - 1);
+				push_back_token(tok2, &aux2);
+
+				/* Remove "@" from the token. */
+				aux1.lval.str[aux1.leng - 1] = '\0';
+				aux1.leng--;
+			}
+			else if (aux1.lval.str[0] == '@')
+			{
+				int			tok2;
+				TokenAuxData aux2;
+
+				tok2 = internal_yylex(&aux2);
+
+				/* @<IDENT>: Read ahead and return as a single token. */
+				if (tok2 == IDENT)
+				{
+					StringInfoData	var_word;
+
+					initStringInfo(&var_word);
+					appendStringInfoString(&var_word, aux1.lval.str);
+					appendStringInfoString(&var_word, aux2.lval.str);
+
+					if (pltsql_parse_word(var_word.data,
+					                      var_word.data,
+					                      &aux1.lval.wdatum,
+					                      &aux1.lval.word))
+						tok1 = T_DATUM;
+					else
+					{
+						tok1 = T_WORD;
+						aux1.lval.str = var_word.data;
+					}
+				}
+			}
+		}
 		/* Not a potential pltsql variable name, just return the data */
 	}
 

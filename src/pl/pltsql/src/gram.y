@@ -52,6 +52,12 @@ typedef struct
 	int			leaderlen;
 } sql_error_callback_arg;
 
+typedef struct
+{
+	int			location;
+	char		*ident;
+} tsql_ident_ref;
+
 #define parser_errposition(pos)  pltsql_scanner_errposition(pos)
 
 union YYSTYPE;					/* need forward reference for tok_is_keyword */
@@ -61,6 +67,7 @@ static	bool			tok_is_keyword(int token, union YYSTYPE *lval,
 static	void			word_is_not_variable(PLword *word, int location);
 static	void			cword_is_not_variable(PLcword *cword, int location);
 static	void			current_token_is_not_variable(int tok);
+static	char *			quote_tsql_identifiers(const StringInfo src, const List *tsql_word_list);
 static	PLTSQL_expr	*read_sql_construct(int until,
 											int until2,
 											int until3,
@@ -71,6 +78,17 @@ static	PLTSQL_expr	*read_sql_construct(int until,
 											bool trim,
 											int *startloc,
 											int *endtoken);
+static	PLTSQL_expr	*read_sql_construct_eol(int until,
+											int until2,
+											int until3,
+											const char *expected,
+											const char *sqlstart,
+											bool isexpression,
+											bool valid_sql,
+											bool trim,
+											int *startloc,
+											int *endtoken,
+											bool untilnewline);
 static	PLTSQL_expr	*read_sql_expression(int until,
 											 const char *expected);
 static	PLTSQL_expr	*read_sql_expression2(int until, int until2,
@@ -1747,6 +1765,7 @@ stmt_print		: K_PRINT
 					{
 						PLTSQL_stmt_raise		*new;
 						int	tok;
+						PLTSQL_expr *expr;
 
 						new = palloc(sizeof(PLTSQL_stmt_raise));
 
@@ -1773,18 +1792,28 @@ stmt_print		: K_PRINT
 						/*
 						 * We expect only one parameter: either a string
 						 * literal, a local variable or a global variable.
-						 *
-						 * We support the string literal subset presently.
 						 */
 						if (tok == SCONST)
 							new->message = yylval.str;
+						else if (tok == T_DATUM)
+						{
+							pltsql_push_back_token(tok);
 
-                        /*
-                         * Make semicolon statement termination optional.
-                         */
-                        tok = yylex();
-                        if (tok != ';')
-                           pltsql_push_back_token(tok);
+							new->message = "%";
+							expr = read_sql_construct_eol(';', 0, 0,
+													  " ",
+													  "SELECT ",
+													  true, true, true,
+													  NULL, &tok, true);
+							new->params = lappend(new->params, expr);
+						}
+
+						/*
+						 * Make semicolon statement termination optional.
+						 */
+						tok = yylex();
+						if (tok != ';')
+						   pltsql_push_back_token(tok);
 
 						$$ = (PLTSQL_stmt *)new;
 					}
@@ -2422,12 +2451,53 @@ read_sql_construct(int until,
 				   int *startloc,
 				   int *endtoken)
 {
+	return read_sql_construct_eol(until, until2, until3, expected, sqlstart,
+							  isexpression, valid_sql, trim, startloc, endtoken,
+							  false);
+}
+
+/*
+ * Read a SQL construct and build a PLTSQL_expr for it, optionally read until
+ * the end of line or terminator tokens.
+ *
+ * until:		token code for expected terminator
+ * until2:		token code for alternate terminator (pass 0 if none)
+ * until3:		token code for another alternate terminator (pass 0 if none)
+ * expected:	text to use in complaining that terminator was not found
+ * sqlstart:	text to prefix to the accumulated SQL text
+ * isexpression: whether to say we're reading an "expression" or a "statement"
+ * valid_sql:   whether to check the syntax of the expr (prefixed with sqlstart)
+ * trim:		trim trailing whitespace
+ * startloc:	if not NULL, location of first token is stored at *startloc
+ * endtoken:	if not NULL, ending token is stored at *endtoken
+ *				(this is only interesting if until2 or until3 isn't zero)
+ * untilnewline: whether newline is considered a terminator
+ */
+static PLTSQL_expr *
+read_sql_construct_eol(int until,
+					   int until2,
+					   int until3,
+					   const char *expected,
+					   const char *sqlstart,
+					   bool isexpression,
+					   bool valid_sql,
+					   bool trim,
+					   int *startloc,
+					   int *endtoken,
+					   bool untilnewline)
+{
 	int					tok;
 	StringInfoData		ds;
 	IdentifierLookup	save_IdentifierLookup;
+	int					tsql_ident_len;
+	char				*ident;
+	tsql_ident_ref		*tident_ref;
 	int					startlocation = -1;
 	int					parenlevel = 0;
-	PLTSQL_expr		*expr;
+	int					sqlstartlen = strlen(sqlstart);
+	int					lineno = pltsql_location_to_lineno(yylloc);
+	PLTSQL_expr			*expr;
+	List				*tsql_idents = NIL;
 
 	initStringInfo(&ds);
 	appendStringInfoString(&ds, sqlstart);
@@ -2438,9 +2508,54 @@ read_sql_construct(int until,
 
 	for (;;)
 	{
+        int tok1, tok2, tok1_loc, tok2_loc;
+		/*
+		 * The core lexer does not return a newline token but we can rely upon
+		 * lineno tracking in our scanner component.
+		 */
+		if (untilnewline)
+		{
+            /* Peek as we do not want any variable lookup side-effects */
+            pltsql_peek2(&tok1, &tok2, &tok1_loc, &tok2_loc);
+            if (pltsql_location_to_lineno(tok1_loc) > lineno)
+            {
+                yylloc = tok1_loc;
+                break;
+            }
+		}
+
+		ident = NULL;
 		tok = yylex();
 		if (startlocation < 0)			/* remember loc of first token */
 			startlocation = yylloc;
+
+		if (tok == T_WORD)
+		{
+			ident = yylval.word.ident;
+		}
+		else if (tok == T_DATUM)
+		{
+			ident = NameOfDatum(&(yylval.wdatum));
+		}
+
+		/*
+		 * Create and append a reference to this word if it is a TSQL
+		 * identifier.
+		 */
+		if (ident)
+		{
+			tsql_ident_len = strlen(ident);
+
+			if (tsql_ident_len > 0 && ident[0] == '@')
+			{
+				tident_ref = palloc(sizeof(tsql_ident_ref));
+				tident_ref->location = (sqlstartlen - 1) +
+					(yylloc - startlocation);
+				tident_ref->ident = pstrdup(ident);
+				tsql_idents = lappend(tsql_idents, tident_ref);
+			}
+		}
+
 		if (tok == until && parenlevel == 0)
 			break;
 		if (tok == until2 && parenlevel == 0)
@@ -2477,6 +2592,7 @@ read_sql_construct(int until,
 								expected),
 						 parser_errposition(yylloc)));
 		}
+		lineno = pltsql_location_to_lineno(yylloc);
 	}
 
 	pltsql_IdentifierLookup = save_IdentifierLookup;
@@ -2506,7 +2622,7 @@ read_sql_construct(int until,
 
 	expr = palloc0(sizeof(PLTSQL_expr));
 	expr->dtype			= PLTSQL_DTYPE_EXPR;
-	expr->query			= pstrdup(ds.data);
+	expr->query			= pstrdup(quote_tsql_identifiers(&ds, tsql_idents));
 	expr->plan			= NULL;
 	expr->paramnos		= NULL;
 	expr->ns			= pltsql_ns_top();
@@ -2516,6 +2632,36 @@ read_sql_construct(int until,
 		check_sql_expr(expr->query, startlocation, strlen(sqlstart));
 
 	return expr;
+}
+
+static
+char * quote_tsql_identifiers(const StringInfo src, const List *tsql_idents)
+{
+	StringInfoData	dest;
+	ListCell		*lc;
+	int				prev = 0;
+
+	if (list_length(tsql_idents) == 0)
+		return src->data;
+
+	initStringInfo(&dest);
+
+	foreach(lc, tsql_idents)
+	{
+		tsql_ident_ref *tword = (tsql_ident_ref *) lfirst(lc);
+
+		/*
+		 * Append the part of the source text appearing before the identifier
+		 * that we haven't inserted already.
+		 */
+		appendBinaryStringInfo(&dest, &(src->data[prev]),
+							   tword->location - prev + 1);
+		appendStringInfo(&dest, "\"%s\"", tword->ident);
+		prev = tword->location + 1 + strlen(tword->ident);
+	}
+
+	appendStringInfoString(&dest, &(src->data[prev]));
+	return dest.data;
 }
 
 static PLTSQL_type *
