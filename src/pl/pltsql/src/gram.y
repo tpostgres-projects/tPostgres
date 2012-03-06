@@ -78,7 +78,7 @@ static	PLTSQL_expr	*read_sql_construct(int until,
 											bool trim,
 											int *startloc,
 											int *endtoken);
-static	PLTSQL_expr	*read_sql_construct_eol(int until,
+static	PLTSQL_expr	*read_sql_construct_bos(int until,
 											int until2,
 											int until3,
 											const char *expected,
@@ -88,13 +88,20 @@ static	PLTSQL_expr	*read_sql_construct_eol(int until,
 											bool trim,
 											int *startloc,
 											int *endtoken,
-											bool untilnewline);
+											bool untilbostok);
 static	PLTSQL_expr	*read_sql_expression(int until,
+											 const char *expected);
+static	PLTSQL_expr	*read_sql_expression_bos(int until,
 											 const char *expected);
 static	PLTSQL_expr	*read_sql_expression2(int until, int until2,
 											  const char *expected,
 											  int *endtoken);
+static PLTSQL_expr * read_sql_expression2_bos(int until, int until2,
+											  const char *expected,
+											  int *endtoken);
+static bool is_terminator(int tok);
 static	PLTSQL_expr	*read_sql_stmt(const char *sqlstart);
+static	PLTSQL_expr	*read_sql_stmt_bos(const char *sqlstart);
 static	PLTSQL_type	*read_datatype(int tok);
 static	PLTSQL_stmt	*make_execsql_stmt(int firsttoken, int location);
 static	PLTSQL_stmt_fetch *read_fetch_direction(void);
@@ -194,7 +201,7 @@ static	List			*read_raise_options(void);
 %type <list>	decl_cursor_arglist
 %type <nsitem>	decl_aliasitem
 
-%type <expr>	expr_until_semi expr_until_rightbracket
+%type <expr>	expr_until_semi expr_until_semi_or_bos expr_until_rightbracket
 %type <expr>	expr_until_then expr_until_loop opt_expr_until_when
 %type <expr>	opt_exitcond
 
@@ -346,6 +353,7 @@ static	List			*read_raise_options(void);
 %token <keyword>	K_WHEN
 %token <keyword>	K_WHILE
 %token <keyword>	K_PRINT
+%token <keyword>	K_SET
 
 %%
 
@@ -378,6 +386,11 @@ comp_option		: '#' K_OPTION K_DUMP
 				;
 
 opt_semi		:
+				| ';'
+				;
+
+opt_semi_or_commma :
+				| ','
 				| ';'
 				;
 
@@ -516,7 +529,7 @@ decl_statement	: decl_varname decl_const decl_datatype decl_collate decl_notnull
 										 parser_errposition(@5)));
 						}
 					}
-				| decl_varname K_ALIAS K_FOR decl_aliasitem ';'
+				| decl_varname K_ALIAS K_FOR decl_aliasitem opt_semi_or_commma
 					{
 						pltsql_ns_additem($4->itemtype,
 										   $4->itemno, $1.name);
@@ -589,7 +602,7 @@ opt_scrollable :
 
 decl_cursor_query :
 					{
-						$$ = read_sql_stmt("");
+						$$ = read_sql_stmt_bos("");
 					}
 				;
 
@@ -756,9 +769,26 @@ decl_notnull	:
 
 decl_defval		: ';'
 					{ $$ = NULL; }
+				| ','
+					{ $$ = NULL; }
+				| K_DECLARE
+					{
+                        pltsql_push_back_token(K_DECLARE);
+                        $$ = NULL;
+                    }
+				| K_BEGIN
+					{
+                        pltsql_push_back_token(K_BEGIN);
+                        $$ = NULL;
+                    }
+				| T_WORD
+					{
+                        pltsql_push_back_token(T_WORD);
+                        $$ = NULL;
+                    }
 				| decl_defkey
 					{
-						$$ = read_sql_expression(';', ";");
+						$$ = read_sql_expression2_bos(';', ',', ", or ;", NULL);
 					}
 				;
 
@@ -836,7 +866,7 @@ proc_stmt		: pl_block ';'
 						{ $$ = $1; }
 				;
 
-stmt_perform	: K_PERFORM expr_until_semi
+stmt_perform	: K_PERFORM expr_until_semi_or_bos
 					{
 						PLTSQL_stmt_perform *new;
 
@@ -849,21 +879,26 @@ stmt_perform	: K_PERFORM expr_until_semi
 					}
 				;
 
-stmt_assign		: assign_var assign_operator expr_until_semi
+opt_set		:
+			| K_SET
+			;
+
+
+stmt_assign		: opt_set assign_var assign_operator expr_until_semi_or_bos
 					{
 						PLTSQL_stmt_assign *new;
 
 						new = palloc0(sizeof(PLTSQL_stmt_assign));
 						new->cmd_type = PLTSQL_STMT_ASSIGN;
-						new->lineno   = pltsql_location_to_lineno(@1);
-						new->varno = $1;
-						new->expr  = $3;
+						new->lineno   = pltsql_location_to_lineno(@2);
+						new->varno = $2;
+						new->expr  = $4;
 
 						$$ = (PLTSQL_stmt *)new;
 					}
 				;
 
-stmt_getdiag	: K_GET getdiag_area_opt K_DIAGNOSTICS getdiag_list ';'
+stmt_getdiag	: K_GET getdiag_area_opt K_DIAGNOSTICS getdiag_list opt_semi
 					{
 						PLTSQL_stmt_getdiag	 *new;
 						ListCell		*lc;
@@ -1030,7 +1065,7 @@ assign_var		: T_DATUM
 					}
 				;
 
-stmt_if			: K_IF expr_until_then proc_sect stmt_elsifs stmt_else K_END K_IF ';'
+stmt_if			: K_IF expr_until_then proc_sect stmt_elsifs stmt_else K_END K_IF opt_semi
 					{
 						PLTSQL_stmt_if *new;
 
@@ -1073,7 +1108,7 @@ stmt_else		:
 					}
 				;
 
-stmt_case		: K_CASE opt_expr_until_when case_when_list opt_case_else K_END K_CASE ';'
+stmt_case		: K_CASE opt_expr_until_when case_when_list opt_case_else K_END K_CASE opt_semi
 					{
 						$$ = make_case(@1, $2, $3, $4);
 					}
@@ -1800,7 +1835,7 @@ stmt_print		: K_PRINT
 							pltsql_push_back_token(tok);
 
 							new->message = "%";
-							expr = read_sql_construct_eol(';', 0, 0,
+							expr = read_sql_construct_bos(';', 0, 0,
 													  " ",
 													  "SELECT ",
 													  true, true, true,
@@ -2036,7 +2071,7 @@ stmt_fetch		: K_FETCH opt_fetch_direction cursor_variable K_INTO
 					}
 				;
 
-stmt_move		: K_MOVE opt_fetch_direction cursor_variable ';'
+stmt_move		: K_MOVE opt_fetch_direction cursor_variable opt_semi
 					{
 						PLTSQL_stmt_fetch *fetch = $2;
 
@@ -2054,7 +2089,7 @@ opt_fetch_direction	:
 					}
 				;
 
-stmt_close		: K_CLOSE cursor_variable ';'
+stmt_close		: K_CLOSE cursor_variable opt_semi
 					{
 						PLTSQL_stmt_close *new;
 
@@ -2218,9 +2253,13 @@ proc_condition	: any_identifier
 						}
 				;
 
-expr_until_semi :
-					{ $$ = read_sql_expression(';', ";"); }
+expr_until_semi	:
+				{ $$ = read_sql_expression(';', ";"); }
 				;
+
+expr_until_semi_or_bos :
+					{ $$ = read_sql_expression_bos(';', ";"); }
+					;
 
 expr_until_rightbracket :
 					{ $$ = read_sql_expression(']', "]"); }
@@ -2317,6 +2356,7 @@ unreserved_keyword	:
 				| K_ROW_COUNT
 				| K_ROWTYPE
 				| K_SCROLL
+				| K_SET
 				| K_SLICE
 				| K_SQLSTATE
 				| K_STACKED
@@ -2416,12 +2456,47 @@ read_sql_expression2(int until, int until2, const char *expected,
 							  "SELECT ", true, true, true, NULL, endtoken);
 }
 
+/*
+ * Convenience routine to read an expression with an explicit or
+ * beginning-of-statement token.
+ */
+static PLTSQL_expr *
+read_sql_expression_bos(int until, const char *expected)
+{
+	return read_sql_construct_bos(until, 0, 0, expected,
+							  "SELECT ", true, true, true, NULL, NULL, true);
+}
+
+/*
+ * Convenience routine to read an expression with two possible explicit
+ * terminators or a beginning-of-statement token.
+ */
+static PLTSQL_expr *
+read_sql_expression2_bos(int until, int until2, const char *expected,
+					 int *endtoken)
+{
+	return read_sql_construct_bos(until, until2, 0, expected,
+							  "SELECT ", true, true, true, NULL, endtoken,
+							  true);
+}
+
 /* Convenience routine to read a SQL statement that must end with ';' */
 static PLTSQL_expr *
 read_sql_stmt(const char *sqlstart)
 {
 	return read_sql_construct(';', 0, 0, ";",
-							  sqlstart, false, true, true, NULL, NULL);
+                                  sqlstart, false, true, true, NULL, NULL);
+}
+
+/*
+ * Convenience routine to read a SQL statement that must end with ';' or at
+ * a beginning-of-statement token.
+ */
+static PLTSQL_expr *
+read_sql_stmt_bos(const char *sqlstart)
+{
+	return read_sql_construct_bos(';', 0, 0, ";",
+                                  sqlstart, false, true, true, NULL, NULL, true);
 }
 
 /*
@@ -2451,14 +2526,14 @@ read_sql_construct(int until,
 				   int *startloc,
 				   int *endtoken)
 {
-	return read_sql_construct_eol(until, until2, until3, expected, sqlstart,
+	return read_sql_construct_bos(until, until2, until3, expected, sqlstart,
 							  isexpression, valid_sql, trim, startloc, endtoken,
 							  false);
 }
 
 /*
- * Read a SQL construct and build a PLTSQL_expr for it, optionally read until
- * the end of line or terminator tokens.
+ * Read a SQL construct and build a PLTSQL_expr for it, read until one of the
+ * terminator tokens is encountered or optionally until the end of the line.
  *
  * until:		token code for expected terminator
  * until2:		token code for alternate terminator (pass 0 if none)
@@ -2471,10 +2546,10 @@ read_sql_construct(int until,
  * startloc:	if not NULL, location of first token is stored at *startloc
  * endtoken:	if not NULL, ending token is stored at *endtoken
  *				(this is only interesting if until2 or until3 isn't zero)
- * untilnewline: whether newline is considered a terminator
+ * untilbostok:	whether a beginning-of-statement token is a terminator
  */
 static PLTSQL_expr *
-read_sql_construct_eol(int until,
+read_sql_construct_bos(int until,
 					   int until2,
 					   int until3,
 					   const char *expected,
@@ -2484,7 +2559,7 @@ read_sql_construct_eol(int until,
 					   bool trim,
 					   int *startloc,
 					   int *endtoken,
-					   bool untilnewline)
+					   bool untilbostok)
 {
 	int					tok;
 	StringInfoData		ds;
@@ -2495,7 +2570,6 @@ read_sql_construct_eol(int until,
 	int					startlocation = -1;
 	int					parenlevel = 0;
 	int					sqlstartlen = strlen(sqlstart);
-	int					lineno = pltsql_location_to_lineno(yylloc);
 	PLTSQL_expr			*expr;
 	List				*tsql_idents = NIL;
 
@@ -2508,26 +2582,30 @@ read_sql_construct_eol(int until,
 
 	for (;;)
 	{
-        int tok1, tok2, tok1_loc, tok2_loc;
-		/*
-		 * The core lexer does not return a newline token but we can rely upon
-		 * lineno tracking in our scanner component.
-		 */
-		if (untilnewline)
-		{
-            /* Peek as we do not want any variable lookup side-effects */
-            pltsql_peek2(&tok1, &tok2, &tok1_loc, &tok2_loc);
-            if (pltsql_location_to_lineno(tok1_loc) > lineno)
-            {
-                yylloc = tok1_loc;
-                break;
-            }
-		}
-
 		ident = NULL;
 		tok = yylex();
 		if (startlocation < 0)			/* remember loc of first token */
 			startlocation = yylloc;
+		if (tok == until && parenlevel == 0)
+			break;
+		if (tok == until2 && parenlevel == 0)
+			break;
+		if (tok == until3 && parenlevel == 0)
+			break;
+        if (untilbostok && is_terminator(tok) && parenlevel == 0)
+		{
+			pltsql_push_back_token(tok);
+			break;
+		}
+
+		if (tok == '(' || tok == '[')
+			parenlevel++;
+		else if (tok == ')' || tok == ']')
+		{
+			parenlevel--;
+			if (parenlevel < 0)
+				yyerror("mismatched parentheses");
+		}
 
 		if (tok == T_WORD)
 		{
@@ -2556,20 +2634,6 @@ read_sql_construct_eol(int until,
 			}
 		}
 
-		if (tok == until && parenlevel == 0)
-			break;
-		if (tok == until2 && parenlevel == 0)
-			break;
-		if (tok == until3 && parenlevel == 0)
-			break;
-		if (tok == '(' || tok == '[')
-			parenlevel++;
-		else if (tok == ')' || tok == ']')
-		{
-			parenlevel--;
-			if (parenlevel < 0)
-				yyerror("mismatched parentheses");
-		}
 		/*
 		 * End of function definition is an error, and we don't expect to
 		 * hit a semicolon either (unless it's the until symbol, in which
@@ -2592,7 +2656,6 @@ read_sql_construct_eol(int until,
 								expected),
 						 parser_errposition(yylloc)));
 		}
-		lineno = pltsql_location_to_lineno(yylloc);
 	}
 
 	pltsql_IdentifierLookup = save_IdentifierLookup;
@@ -2630,12 +2693,11 @@ read_sql_construct_eol(int until,
 
 	if (valid_sql)
 		check_sql_expr(expr->query, startlocation, strlen(sqlstart));
-
 	return expr;
 }
 
-static
-char * quote_tsql_identifiers(const StringInfo src, const List *tsql_idents)
+static char *
+quote_tsql_identifiers(const StringInfo src, const List *tsql_idents)
 {
 	StringInfoData	dest;
 	ListCell		*lc;
@@ -2662,6 +2724,39 @@ char * quote_tsql_identifiers(const StringInfo src, const List *tsql_idents)
 
 	appendStringInfoString(&dest, &(src->data[prev]));
 	return dest.data;
+}
+
+/*
+ * Determines whether there the specified token is a statement terminator.
+ *
+ * "tok" must be the current token, since we also look at yylval.
+ */
+static bool
+is_terminator(int tok)
+{
+	switch (tok)
+	{
+		case K_BEGIN:
+		case K_DECLARE:
+		case K_END:
+		case K_GET:
+		case K_INSERT:
+		case K_PERFORM:
+		case K_PRINT:
+		case K_RAISE:
+		case K_SET:
+		case K_WHILE:
+			return true;
+	}
+
+	/* List of words that are not tokens but mark the beginning of a statement. */
+	if (tok == T_WORD)
+	{
+		if (strcasecmp(yylval.word.ident, "UPDATE") == 0)
+			return true;
+	}
+
+	return false;
 }
 
 static PLTSQL_type *
@@ -2746,7 +2841,7 @@ read_datatype(int tok)
 		}
 		/* Possible followers for datatype in a declaration */
 		if (tok == K_COLLATE || tok == K_NOT ||
-			tok == '=' || tok == COLON_EQUALS || tok == K_DEFAULT)
+		    tok == '=' || tok == COLON_EQUALS || tok == K_DEFAULT)
 			break;
 		/* Possible followers for datatype in a cursor_arg list */
 		if ((tok == ',' || tok == ')') && parenlevel == 0)
@@ -2755,6 +2850,8 @@ read_datatype(int tok)
 			parenlevel++;
 		else if (tok == ')')
 			parenlevel--;
+		if (is_terminator(tok))
+			break;
 
 		tok = yylex();
 	}
@@ -2762,6 +2859,11 @@ read_datatype(int tok)
 	/* set up ds to contain complete typename text */
 	initStringInfo(&ds);
 	pltsql_append_source_text(&ds, startlocation, yylloc);
+
+	/* trim any trailing whitespace, for neatness */
+	while (ds.len > 0 && scanner_isspace(ds.data[ds.len - 1]))
+		ds.data[--ds.len] = '\0';
+
 	type_name = ds.data;
 
 	if (type_name[0] == '\0')
@@ -2815,6 +2917,7 @@ make_execsql_stmt(int firsttoken, int location)
 			into_end_loc = yylloc;		/* token after the INTO part */
 		if (tok == ';')
 			break;
+
 		if (tok == 0)
 			yyerror("unexpected end of function definition");
 

@@ -1,0 +1,31 @@
+--
+-- PLTSQL -- IF Statement
+--
+CREATE FUNCTION if_with_semicolon() RETURNS void AS $$
+BEGIN
+    IF true THEN
+        PRINT 'true'
+    END IF;
+END
+$$ LANGUAGE pltsql;
+SELECT if_with_semicolon();
+INFO:  true
+ if_with_semicolon 
+-------------------
+ 
+(1 row)
+
+CREATE FUNCTION if_without_semicolon() RETURNS void AS $$
+BEGIN
+    IF true THEN
+        PRINT 'true'
+    END IF
+END
+$$ LANGUAGE pltsql;
+SELECT if_without_semicolon();
+INFO:  true
+ if_without_semicolon 
+----------------------
+ 
+(1 row)
+

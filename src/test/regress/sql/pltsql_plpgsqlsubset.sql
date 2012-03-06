@@ -1824,7 +1824,7 @@ end$$ language pltsql;
 create function trap_foreign_key_2() returns int as $$
 begin
 	begin	-- start a subtransaction
-		set constraints all immediate;
+		-- set constraints all immediate; -- not supported in TSQL
 	exception
 		when foreign_key_violation then
 			raise notice 'caught foreign_key_violation';
@@ -1837,10 +1837,10 @@ select trap_foreign_key(1);
 select trap_foreign_key(2);	-- detects FK violation
 
 begin;
-  set constraints all deferred;
+  -- set constraints all deferred; -- not supported in TSQL
   select trap_foreign_key(2);	-- should not detect FK violation
   savepoint x;
-    set constraints all immediate; -- fails
+    -- set constraints all immediate; -- fails -- not supported in TSQL
   rollback to x;
   select trap_foreign_key_2();  -- detects FK violation
 commit;				-- still fails

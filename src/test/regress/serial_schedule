@@ -116,6 +116,9 @@ test: plancache
 test: limit
 test: plpgsql
 test: pltsql_print
+test: pltsql_if
+test: pltsql_at_prefixed_vars
+test: pltsql_optsemicolterm
 test: pltsql_plpgsqlsubset
 test: copy2
 test: temp

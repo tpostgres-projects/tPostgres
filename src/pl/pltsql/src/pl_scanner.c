@@ -96,6 +96,7 @@ static const ScanKeyword reserved_keywords[] = {
 	PG_KEYWORD("print", K_PRINT, RESERVED_KEYWORD)
 	PG_KEYWORD("raise", K_RAISE, RESERVED_KEYWORD)
 	PG_KEYWORD("return", K_RETURN, RESERVED_KEYWORD)
+	PG_KEYWORD("set", K_SET, RESERVED_KEYWORD)
 	PG_KEYWORD("strict", K_STRICT, RESERVED_KEYWORD)
 	PG_KEYWORD("then", K_THEN, RESERVED_KEYWORD)
 	PG_KEYWORD("to", K_TO, RESERVED_KEYWORD)
@@ -144,6 +145,7 @@ static const ScanKeyword unreserved_keywords[] = {
 	PG_KEYWORD("row_count", K_ROW_COUNT, UNRESERVED_KEYWORD)
 	PG_KEYWORD("rowtype", K_ROWTYPE, UNRESERVED_KEYWORD)
 	PG_KEYWORD("scroll", K_SCROLL, UNRESERVED_KEYWORD)
+	PG_KEYWORD("set", K_SET, UNRESERVED_KEYWORD)
 	PG_KEYWORD("slice", K_SLICE, UNRESERVED_KEYWORD)
 	PG_KEYWORD("sqlstate", K_SQLSTATE, UNRESERVED_KEYWORD)
 	PG_KEYWORD("stacked", K_STACKED, UNRESERVED_KEYWORD)
@@ -328,9 +330,10 @@ pltsql_yylex(void)
 		 * Handle "@"-prefixed identifiers specific to TSQL.
 		 *
 		 * The core scanner treats "@" as an operator, we do not intend to
-		 * modify the core scanner for one language especially when in addition
-		 * to increasing the delta, this can cause regressions.  This is a
-		 * genuine conflict as the "@" (Absolute Value) operator is unary.
+		 * modify the core scanner for one language especially when it will
+		 * increase our delta while potentially causing regressions.  We would
+		 * be dealing with a genuine conflict here as the operator "@" (Absolute
+		 * Value) is unary.
 		 *
 		 * TSQL does not support this unary operator, and instead, relies on the
 		 * ABS() function that we support already.
@@ -353,7 +356,7 @@ pltsql_yylex(void)
 				aux2.lloc = aux1.lloc + (aux1.leng - 1);
 				push_back_token(tok2, &aux2);
 
-				/* Remove "@" from the token. */
+				/* Now we can remove "@" from the token. */
 				aux1.lval.str[aux1.leng - 1] = '\0';
 				aux1.leng--;
 			}

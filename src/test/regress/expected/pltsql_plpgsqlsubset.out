@@ -2111,7 +2111,7 @@ end$$ language pltsql;
 create function trap_foreign_key_2() returns int as $$
 begin
 	begin	-- start a subtransaction
-		set constraints all immediate;
+		-- set constraints all immediate; -- not supported in TSQL
 	exception
 		when foreign_key_violation then
 			raise notice 'caught foreign_key_violation';
@@ -2133,28 +2133,24 @@ NOTICE:  caught foreign_key_violation
 (1 row)
 
 begin;
-  set constraints all deferred;
+  -- set constraints all deferred; -- not supported in TSQL
   select trap_foreign_key(2);	-- should not detect FK violation
+NOTICE:  caught foreign_key_violation
  trap_foreign_key 
 ------------------
-                1
+                0
 (1 row)
 
   savepoint x;
-    set constraints all immediate; -- fails
-ERROR:  insert or update on table "slave" violates foreign key constraint "slave_f1_fkey"
-DETAIL:  Key (f1)=(2) is not present in table "master".
+    -- set constraints all immediate; -- fails -- not supported in TSQL
   rollback to x;
   select trap_foreign_key_2();  -- detects FK violation
-NOTICE:  caught foreign_key_violation
  trap_foreign_key_2 
 --------------------
-                  0
+                  1
 (1 row)
 
 commit;				-- still fails
-ERROR:  insert or update on table "slave" violates foreign key constraint "slave_f1_fkey"
-DETAIL:  Key (f1)=(2) is not present in table "master".
 drop function trap_foreign_key(int);
 drop function trap_foreign_key_2();
 --
