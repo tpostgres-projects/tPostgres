@@ -203,7 +203,7 @@ static	List			*read_raise_options(void);
 
 %type <expr>	expr_until_semi expr_until_semi_or_bos expr_until_rightbracket
 %type <expr>	expr_until_then expr_until_loop opt_expr_until_when
-%type <expr>	opt_exitcond
+%type <expr>	opt_exitcond expr_until_then_or_bos
 
 %type <ival>	assign_var foreach_slice
 %type <var>		cursor_variable
@@ -1065,7 +1065,7 @@ assign_var		: T_DATUM
 					}
 				;
 
-stmt_if			: K_IF expr_until_then proc_sect stmt_elsifs stmt_else K_END K_IF opt_semi
+stmt_if			: K_IF expr_until_then_or_bos proc_sect stmt_elsifs stmt_else K_END K_IF opt_semi
 					{
 						PLTSQL_stmt_if *new;
 
@@ -1085,7 +1085,7 @@ stmt_elsifs		:
 					{
 						$$ = NIL;
 					}
-				| stmt_elsifs K_ELSIF expr_until_then proc_sect
+				| stmt_elsifs K_ELSIF expr_until_then_or_bos proc_sect
 					{
 						PLTSQL_if_elsif *new;
 
@@ -2261,6 +2261,10 @@ expr_until_semi_or_bos :
 					{ $$ = read_sql_expression_bos(';', ";"); }
 					;
 
+expr_until_then_or_bos	:
+				{ $$ = read_sql_expression_bos(K_THEN, "THEN"); }
+				;
+
 expr_until_rightbracket :
 					{ $$ = read_sql_expression(']', "]"); }
 				;
@@ -2739,7 +2743,10 @@ is_terminator(int tok)
 		case K_BEGIN:
 		case K_DECLARE:
 		case K_END:
+		case K_ELSE:
+		case K_ELSIF:
 		case K_GET:
+		case K_IF:
 		case K_INSERT:
 		case K_PERFORM:
 		case K_PRINT:
