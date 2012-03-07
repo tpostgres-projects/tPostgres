@@ -119,6 +119,29 @@ $$ LANGUAGE pltsql;
 
 SELECT test_multiple_base_var_types_with_commas_and_line_breaks();
 
+CREATE FUNCTION test_quoted_atvars() RETURNS void AS $$
+DECLARE "@a" int = 1
+DECLARE "@b" int = 2
+BEGIN
+    SET "@a" = "@b" + "@a" + 1 +-"@b"
+    SET "@a" = abs(-"@a");
+    RAISE INFO '%, %', "@a", "@b";
+END
+$$ LANGUAGE pltsql;
+
+SELECT test_quoted_atvars();
+
+CREATE FUNCTION test_quoted_atvar_casing() RETURNS void AS $$
+DECLARE @a int = 1
+DECLARE "@A" int = 2
+BEGIN
+    PRINT @a
+    PRINT "@A"
+END
+$$ LANGUAGE pltsql;
+
+SELECT test_quoted_atvar_casing();
+
 CREATE FUNCTION error_duplicate_atvar_decl() RETURNS void AS $$
 DECLARE @foo int
 DECLARE @foo int

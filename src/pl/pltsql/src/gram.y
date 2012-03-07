@@ -2570,6 +2570,7 @@ read_sql_construct_bos(int until,
 	IdentifierLookup	save_IdentifierLookup;
 	int					tsql_ident_len;
 	char				*ident;
+	bool				is_ident_quoted;
 	tsql_ident_ref		*tident_ref;
 	int					startlocation = -1;
 	int					parenlevel = 0;
@@ -2614,17 +2615,19 @@ read_sql_construct_bos(int until,
 		if (tok == T_WORD)
 		{
 			ident = yylval.word.ident;
+			is_ident_quoted = yylval.word.quoted;
 		}
 		else if (tok == T_DATUM)
 		{
 			ident = NameOfDatum(&(yylval.wdatum));
+			is_ident_quoted = yylval.wdatum.quoted;
 		}
 
 		/*
 		 * Create and append a reference to this word if it is a TSQL
-		 * identifier.
+		 * at-prefixed identifier.
 		 */
-		if (ident)
+		if (ident && !is_ident_quoted)
 		{
 			tsql_ident_len = strlen(ident);
 
