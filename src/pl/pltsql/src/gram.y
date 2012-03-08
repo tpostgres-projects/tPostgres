@@ -2758,17 +2758,29 @@ is_terminator(int tok)
 {
 	switch (tok)
 	{
+		/* Ambiguous tokens not included: NULL */
+		case ';':
 		case K_BEGIN:
+		case K_CASE:			/* Ambiguity? (CASE expression) */
+		case K_CLOSE:
 		case K_DECLARE:
-		case K_END:
 		case K_ELSE:
 		case K_ELSIF:
+		case K_END:
+		case K_EXIT:
+		case K_FETCH:
+		case K_FOR:
+		case K_FOREACH:
 		case K_GET:
 		case K_IF:
 		case K_INSERT:
+		case K_LOOP:
+		case K_MOVE:
+		case K_OPEN:
 		case K_PERFORM:
 		case K_PRINT:
 		case K_RAISE:
+		case K_RETURN:
 		case K_SET:
 		case K_WHILE:
 			return true;
@@ -2779,6 +2791,9 @@ is_terminator(int tok)
 	{
 		if (strcasecmp(yylval.word.ident, "UPDATE") == 0)
 			return true;
+		else if (strcasecmp(yylval.word.ident, "DELETE") == 0)
+			return true;
+		/* SELECT is ambiguous */
 	}
 
 	return false;
