@@ -206,7 +206,7 @@ static	List			*read_raise_options(void);
 
 %type <expr>	expr_until_semi expr_until_semi_or_bos expr_until_rightbracket
 %type <expr>	expr_until_then expr_until_loop opt_expr_until_when
-%type <expr>	opt_exitcond expr_until_then_or_bos
+%type <expr>	opt_exitcond expr_until_then_or_bos expr_until_bos
 
 %type <ival>	assign_var foreach_slice
 %type <var>		cursor_variable
@@ -224,6 +224,7 @@ static	List			*read_raise_options(void);
 %type <stmt>	stmt_dynexecute stmt_for stmt_perform stmt_getdiag
 %type <stmt>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
 %type <stmt>	stmt_case stmt_foreach_a
+%type <stmt>	pltsql_only_stmt plpgsql_only_stmt common_stmt
 
 %type <list>	proc_exceptions
 %type <exception_block> exception_sect
@@ -397,9 +398,12 @@ opt_semi_or_commma :
 				| ';'
 				;
 
-pl_block		: decl_sect K_BEGIN proc_sect exception_sect K_END opt_label
+pl_block		: decl_sect K_BEGIN proc_sect exception_sect K_END
 					{
 						PLTSQL_stmt_block *new;
+						int				  tok1;
+						int				  tok2;
+						char			  *label;
 
 						new = palloc0(sizeof(PLTSQL_stmt_block));
 
@@ -411,13 +415,28 @@ pl_block		: decl_sect K_BEGIN proc_sect exception_sect K_END opt_label
 						new->body		= $3;
 						new->exceptions	= $4;
 
-						check_labels($1.label, $6, @6);
+						tok1 = yylex();
+
+						if (tok1 == T_WORD)
+						{
+							label = yylval.word.ident;
+							tok2 = yylex();
+							if (tok2 == ';')
+								check_labels($1.label, label, yylloc);
+							else
+								pltsql_push_back_token(tok2);
+						}
+						else
+						{
+							if (tok1 != ';')
+								pltsql_push_back_token(tok1);
+						}
+
 						pltsql_ns_pop();
 
 						$$ = (PLTSQL_stmt *)new;
 					}
 				;
-
 
 decl_sect		: opt_block_label
 					{
@@ -825,15 +844,18 @@ proc_stmts		: proc_stmts proc_stmt
 						}
 				;
 
-proc_stmt		: pl_block ';'
+proc_stmt		: common_stmt |
+				  plpgsql_only_stmt |
+				  pltsql_only_stmt
+				;
+
+common_stmt	    : pl_block
 						{ $$ = $1; }
 				| stmt_assign
 						{ $$ = $1; }
 				| stmt_if
 						{ $$ = $1; }
 				| stmt_case
-						{ $$ = $1; }
-				| stmt_loop
 						{ $$ = $1; }
 				| stmt_while
 						{ $$ = $1; }
@@ -846,8 +868,6 @@ proc_stmt		: pl_block ';'
 				| stmt_return
 						{ $$ = $1; }
 				| stmt_raise
-						{ $$ = $1; }
-				| stmt_print
 						{ $$ = $1; }
 				| stmt_execsql
 						{ $$ = $1; }
@@ -867,7 +887,14 @@ proc_stmt		: pl_block ';'
 						{ $$ = $1; }
 				| stmt_null
 						{ $$ = $1; }
-				;
+
+plpgsql_only_stmt	:	stmt_loop
+						{ $$ = $1; }
+					;
+
+pltsql_only_stmt	:	stmt_print
+						{ $$ = $1; }
+					;
 
 stmt_perform	: K_PERFORM expr_until_semi_or_bos
 					{
@@ -1189,7 +1216,7 @@ stmt_loop		: opt_block_label K_LOOP loop_body
 					}
 				;
 
-stmt_while		: opt_block_label K_WHILE expr_until_loop loop_body
+stmt_while		: opt_block_label K_WHILE expr_until_bos K_LOOP loop_body
 					{
 						PLTSQL_stmt_while *new;
 
@@ -1198,14 +1225,31 @@ stmt_while		: opt_block_label K_WHILE expr_until_loop loop_body
 						new->lineno   = pltsql_location_to_lineno(@2);
 						new->label	  = $1;
 						new->cond	  = $3;
-						new->body	  = $4.stmts;
+						new->body	  = $5.stmts;
 
-						check_labels($1, $4.end_label, $4.end_label_location);
+						check_labels($1, $5.end_label, $5.end_label_location);
+						pltsql_ns_pop();
+
+						$$ = (PLTSQL_stmt *)new;
+					}
+				| opt_block_label K_WHILE expr_until_bos common_stmt
+					{
+						PLTSQL_stmt_while *new;
+
+						new = palloc0(sizeof(PLTSQL_stmt_while));
+						new->cmd_type = PLTSQL_STMT_WHILE;
+						new->lineno   = pltsql_location_to_lineno(@2);
+						new->label	  = $1;
+						new->cond	  = $3;
+						new->body	  = list_make1($4);
+
 						pltsql_ns_pop();
 
 						$$ = (PLTSQL_stmt *)new;
 					}
 				;
+
+
 
 stmt_for		: opt_block_label K_FOR for_control loop_body
 					{
@@ -2268,6 +2312,10 @@ expr_until_then_or_bos	:
 				{ $$ = read_sql_expression_bos(K_THEN, "THEN"); }
 				;
 
+expr_until_bos :
+					{ $$ = read_sql_expression_bos(0, ""); }
+				;
+
 expr_until_rightbracket :
 					{ $$ = read_sql_expression(']', "]"); }
 				;
@@ -2774,6 +2822,10 @@ is_terminator(int tok)
 		case K_GET:
 		case K_IF:
 		case K_INSERT:
+		/*
+		 * Not a core TSQL statement but needed to support PL/pgSQL syntax for
+		 * other loops and the LOOP statement itself all unambiguous contexts.
+		 */
 		case K_LOOP:
 		case K_MOVE:
 		case K_OPEN:
@@ -2783,6 +2835,7 @@ is_terminator(int tok)
 		case K_RETURN:
 		case K_SET:
 		case K_WHILE:
+		case LESS_LESS:			/* Optional label for many statements */
 			return true;
 	}
 
