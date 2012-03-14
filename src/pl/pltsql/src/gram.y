@@ -2725,7 +2725,7 @@ read_sql_construct_bos(int until,
 
 static List *
 append_if_tsql_identifier(int tok, int start_len, int start_loc,
-                       List *tsql_idents)
+						List *tsql_idents)
 {
 	char				*ident;
 	tsql_ident_ref		*tident_ref;
