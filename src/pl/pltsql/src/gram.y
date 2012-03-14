@@ -67,7 +67,10 @@ static	bool			tok_is_keyword(int token, union YYSTYPE *lval,
 static	void			word_is_not_variable(PLword *word, int location);
 static	void			cword_is_not_variable(PLcword *cword, int location);
 static	void			current_token_is_not_variable(int tok);
-static	char *			quote_tsql_identifiers(const StringInfo src, const List *tsql_word_list);
+static	char *			quote_tsql_identifiers(const StringInfo src,
+											const List *tsql_word_list);
+static List * append_if_tsql_identifier(int tok, int start_len, int start_loc,
+											List *tsql_idents);
 static	PLTSQL_expr	*read_sql_construct(int until,
 											int until2,
 											int until3,
@@ -2568,10 +2571,6 @@ read_sql_construct_bos(int until,
 	int					tok;
 	StringInfoData		ds;
 	IdentifierLookup	save_IdentifierLookup;
-	int					tsql_ident_len;
-	char				*ident;
-	bool				is_ident_quoted;
-	tsql_ident_ref		*tident_ref;
 	int					startlocation = -1;
 	int					parenlevel = 0;
 	int					sqlstartlen = strlen(sqlstart);
@@ -2587,7 +2586,6 @@ read_sql_construct_bos(int until,
 
 	for (;;)
 	{
-		ident = NULL;
 		tok = yylex();
 		if (startlocation < 0)			/* remember loc of first token */
 			startlocation = yylloc;
@@ -2612,34 +2610,8 @@ read_sql_construct_bos(int until,
 				yyerror("mismatched parentheses");
 		}
 
-		if (tok == T_WORD)
-		{
-			ident = yylval.word.ident;
-			is_ident_quoted = yylval.word.quoted;
-		}
-		else if (tok == T_DATUM)
-		{
-			ident = NameOfDatum(&(yylval.wdatum));
-			is_ident_quoted = yylval.wdatum.quoted;
-		}
-
-		/*
-		 * Create and append a reference to this word if it is a TSQL
-		 * at-prefixed identifier.
-		 */
-		if (ident && !is_ident_quoted)
-		{
-			tsql_ident_len = strlen(ident);
-
-			if (tsql_ident_len > 0 && ident[0] == '@')
-			{
-				tident_ref = palloc(sizeof(tsql_ident_ref));
-				tident_ref->location = (sqlstartlen - 1) +
-					(yylloc - startlocation);
-				tident_ref->ident = pstrdup(ident);
-				tsql_idents = lappend(tsql_idents, tident_ref);
-			}
-		}
+		tsql_idents = append_if_tsql_identifier(tok, sqlstartlen, startlocation,
+		                                     tsql_idents);
 
 		/*
 		 * End of function definition is an error, and we don't expect to
@@ -2701,6 +2673,49 @@ read_sql_construct_bos(int until,
 	if (valid_sql)
 		check_sql_expr(expr->query, startlocation, strlen(sqlstart));
 	return expr;
+}
+
+static List *
+append_if_tsql_identifier(int tok, int start_len, int start_loc,
+                       List *tsql_idents)
+{
+	char				*ident;
+	tsql_ident_ref		*tident_ref;
+	int					tsql_ident_len;
+	bool				is_ident_quoted;
+
+	ident = NULL;
+	
+	if (tok == T_WORD)
+	{
+		ident = yylval.word.ident;
+		is_ident_quoted = yylval.word.quoted;
+	}
+	else if (tok == T_DATUM)
+	{
+		ident = NameOfDatum(&(yylval.wdatum));
+		is_ident_quoted = yylval.wdatum.quoted;
+	}
+
+	/*
+	 * Create and append a reference to this word if it is a TSQL
+	 * at-prefixed identifier.
+	 */
+	if (ident && !is_ident_quoted)
+	{
+		tsql_ident_len = strlen(ident);
+
+		if (tsql_ident_len > 0 && ident[0] == '@')
+		{
+			tident_ref = palloc(sizeof(tsql_ident_ref));
+			tident_ref->location = (start_len - 1) +
+				(yylloc - start_loc);
+			tident_ref->ident = pstrdup(ident);
+			tsql_idents = lappend(tsql_idents, tident_ref);
+		}
+	}
+
+	return tsql_idents;
 }
 
 static char *
@@ -2903,6 +2918,8 @@ make_execsql_stmt(int firsttoken, int location)
 	bool				have_strict = false;
 	int					into_start_loc = -1;
 	int					into_end_loc = -1;
+	int					start_loc = yylloc;
+	List				*tsql_idents = NIL;
 
 	initStringInfo(&ds);
 
@@ -2927,7 +2944,7 @@ make_execsql_stmt(int firsttoken, int location)
 			into_end_loc = yylloc;		/* token after the INTO part */
 		if (tok == ';')
 			break;
-
+		tsql_idents = append_if_tsql_identifier(tok, 0, start_loc, tsql_idents);
 		if (tok == 0)
 			yyerror("unexpected end of function definition");
 
@@ -2965,7 +2982,7 @@ make_execsql_stmt(int firsttoken, int location)
 
 	expr = palloc0(sizeof(PLTSQL_expr));
 	expr->dtype			= PLTSQL_DTYPE_EXPR;
-	expr->query			= pstrdup(ds.data);
+	expr->query			= pstrdup(quote_tsql_identifiers(&ds, tsql_idents));
 	expr->plan			= NULL;
 	expr->paramnos		= NULL;
 	expr->ns			= pltsql_ns_top();

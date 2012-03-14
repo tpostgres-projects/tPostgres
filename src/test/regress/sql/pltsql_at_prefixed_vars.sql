@@ -142,6 +142,18 @@ $$ LANGUAGE pltsql;
 
 SELECT test_quoted_atvar_casing();
 
+CREATE FUNCTION test_atvar_in_sql() RETURNS void AS $$
+DECLARE @a int = 1
+BEGIN
+    CREATE TEMPORARY TABLE test (a int);
+    INSERT INTO test (a) VALUES (@a);
+    SELECT a INTO @a FROM test;
+    PRINT @a
+END
+$$ LANGUAGE pltsql;
+
+SELECT test_atvar_in_sql();
+
 CREATE FUNCTION error_duplicate_atvar_decl() RETURNS void AS $$
 DECLARE @foo int
 DECLARE @foo int
