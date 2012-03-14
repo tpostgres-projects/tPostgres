@@ -139,7 +139,7 @@ $$ LANGUAGE pltsql;
 
 SELECT test_while_termination();
 
-CREATE TABLE test AS SELECT 1 a;
+CREATE TEMPORARY TABLE test AS SELECT 1 a;
 
 CREATE FUNCTION test_select_after_optsemicol_stmt() RETURNS void AS $$
 DECLARE @a int, c1 CURSOR FOR SELECT a FROM test t1, test t2
