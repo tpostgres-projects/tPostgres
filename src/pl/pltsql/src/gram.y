@@ -102,7 +102,7 @@ static	PLTSQL_expr	*read_sql_expression2(int until, int until2,
 static PLTSQL_expr * read_sql_expression2_bos(int until, int until2,
 											  const char *expected,
 											  int *endtoken);
-static bool is_terminator(int tok);
+static bool is_terminator(int tok, bool first);
 static	PLTSQL_expr	*read_sql_stmt(const char *sqlstart);
 static	PLTSQL_expr	*read_sql_stmt_bos(const char *sqlstart);
 static	PLTSQL_type	*read_datatype(int tok);
@@ -2643,7 +2643,7 @@ read_sql_construct_bos(int until,
 			break;
 		if (tok == until3 && parenlevel == 0)
 			break;
-        if (untilbostok && is_terminator(tok) && parenlevel == 0)
+		if (untilbostok && is_terminator(tok, startlocation == yylloc) && parenlevel == 0)
 		{
 			pltsql_push_back_token(tok);
 			break;
@@ -2802,7 +2802,7 @@ quote_tsql_identifiers(const StringInfo src, const List *tsql_idents)
  * "tok" must be the current token, since we also look at yylval.
  */
 static bool
-is_terminator(int tok)
+is_terminator(int tok, bool first)
 {
 	switch (tok)
 	{
@@ -2846,7 +2846,8 @@ is_terminator(int tok)
 			return true;
 		else if (strcasecmp(yylval.word.ident, "DELETE") == 0)
 			return true;
-		/* SELECT is ambiguous */
+		else if (!first && (strcasecmp(yylval.word.ident, "SELECT") == 0))
+			return true;
 	}
 
 	return false;
@@ -2860,6 +2861,7 @@ read_datatype(int tok)
 	int					startlocation;
 	PLTSQL_type		*result;
 	int					parenlevel = 0;
+	bool				first = true;
 
 	/* Should only be called while parsing DECLARE sections */
 	Assert(pltsql_IdentifierLookup == IDENTIFIER_LOOKUP_DECLARE);
@@ -2943,10 +2945,11 @@ read_datatype(int tok)
 			parenlevel++;
 		else if (tok == ')')
 			parenlevel--;
-		if (is_terminator(tok))
+		if (is_terminator(tok, first) && parenlevel == 0)
 			break;
 
 		tok = yylex();
+		first = false;
 	}
 
 	/* set up ds to contain complete typename text */

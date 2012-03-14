@@ -120,3 +120,35 @@ END
 $$ LANGUAGE pltsql;
 
 SELECT test_move_termination();
+
+CREATE FUNCTION test_while_termination() RETURNS void AS $$
+    DECLARE @a int = 0
+BEGIN
+    WHILE @a < 2
+    BEGIN
+        PRINT @a
+        SET @a = @a + 1
+    END
+
+    WHILE @a < 5
+        SET @a = @a + 1
+
+    PRINT @a
+END
+$$ LANGUAGE pltsql;
+
+SELECT test_while_termination();
+
+CREATE TABLE test AS SELECT 1 a;
+
+CREATE FUNCTION test_select_after_optsemicol_stmt() RETURNS void AS $$
+DECLARE @a int, c1 CURSOR FOR SELECT a FROM test t1, test t2
+BEGIN
+    SET @a = 12
+    SELECT a + 2 INTO @a FROM test WHERE
+            a = (SELECT 1) LIMIT 1;
+    print @a
+end
+$$ language pltsql;
+
+SELECT test_select_after_optsemicol_stmt();
