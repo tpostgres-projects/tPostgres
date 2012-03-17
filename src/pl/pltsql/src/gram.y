@@ -135,6 +135,7 @@ static	void			 check_labels(const char *start_label,
 static	PLTSQL_expr	*read_cursor_args(PLTSQL_var *cursor,
 										  int until, const char *expected);
 static	List			*read_raise_options(void);
+static	void			ignore_opt_semicol(void);
 
 %}
 
@@ -206,7 +207,7 @@ static	List			*read_raise_options(void);
 
 %type <expr>	expr_until_semi expr_until_semi_or_bos expr_until_rightbracket
 %type <expr>	expr_until_then expr_until_loop opt_expr_until_when
-%type <expr>	opt_exitcond expr_until_then_or_bos expr_until_bos
+%type <expr>	opt_exitcond expr_until_bos
 
 %type <ival>	assign_var foreach_slice
 %type <var>		cursor_variable
@@ -358,6 +359,9 @@ static	List			*read_raise_options(void);
 %token <keyword>	K_WHILE
 %token <keyword>	K_PRINT
 %token <keyword>	K_SET
+
+%nonassoc LOWER_THAN_ELSE
+%nonassoc K_ELSE
 
 %%
 
@@ -1095,7 +1099,7 @@ assign_var		: T_DATUM
 					}
 				;
 
-stmt_if			: K_IF expr_until_then_or_bos proc_sect stmt_elsifs stmt_else K_END K_IF opt_semi
+stmt_if			: K_IF expr_until_bos K_THEN proc_sect stmt_elsifs stmt_else K_END K_IF opt_semi
 					{
 						PLTSQL_stmt_if *new;
 
@@ -1103,19 +1107,48 @@ stmt_if			: K_IF expr_until_then_or_bos proc_sect stmt_elsifs stmt_else K_END K_
 						new->cmd_type	= PLTSQL_STMT_IF;
 						new->lineno		= pltsql_location_to_lineno(@1);
 						new->cond		= $2;
-						new->then_body	= $3;
-						new->elsif_list = $4;
-						new->else_body  = $5;
+						new->then_body	= $4;
+						new->elsif_list = $5;
+						new->else_body  = $6;
 
 						$$ = (PLTSQL_stmt *)new;
 					}
+				| K_IF expr_until_bos proc_stmt %prec LOWER_THAN_ELSE
+				{
+						PLTSQL_stmt_if *new;
+
+						new = palloc0(sizeof(PLTSQL_stmt_if));
+						new->cmd_type	= PLTSQL_STMT_IF;
+						new->lineno		= pltsql_location_to_lineno(@1);
+						new->cond		= $2;
+						new->then_body	= list_make1($3);
+
+						ignore_opt_semicol();
+
+						$$ = (PLTSQL_stmt *)new;
+				}
+				| K_IF expr_until_bos proc_stmt K_ELSE proc_stmt
+				{
+						PLTSQL_stmt_if *new;
+
+						new = palloc0(sizeof(PLTSQL_stmt_if));
+						new->cmd_type	= PLTSQL_STMT_IF;
+						new->lineno		= pltsql_location_to_lineno(@1);
+						new->cond		= $2;
+						new->then_body	= list_make1($3);
+						new->else_body  = list_make1($5);
+
+						ignore_opt_semicol();
+
+						$$ = (PLTSQL_stmt *)new;
+				}
 				;
 
 stmt_elsifs		:
 					{
 						$$ = NIL;
 					}
-				| stmt_elsifs K_ELSIF expr_until_then_or_bos proc_sect
+				| stmt_elsifs K_ELSIF expr_until_then proc_sect
 					{
 						PLTSQL_if_elsif *new;
 
@@ -2308,10 +2341,6 @@ expr_until_semi_or_bos :
 					{ $$ = read_sql_expression_bos(';', ";"); }
 					;
 
-expr_until_then_or_bos	:
-				{ $$ = read_sql_expression_bos(K_THEN, "THEN"); }
-				;
-
 expr_until_bos :
 					{ $$ = read_sql_expression_bos(0, ""); }
 				;
@@ -2643,7 +2672,7 @@ read_sql_construct_bos(int until,
 			break;
 		if (tok == until3 && parenlevel == 0)
 			break;
-		if (untilbostok && is_terminator(tok, startlocation == yylloc) && parenlevel == 0)
+		if (untilbostok && is_terminator(tok, (startlocation == yylloc)) && parenlevel == 0)
 		{
 			pltsql_push_back_token(tok);
 			break;
@@ -2822,11 +2851,6 @@ is_terminator(int tok, bool first)
 		case K_GET:
 		case K_IF:
 		case K_INSERT:
-		/*
-		 * Not a core TSQL statement but needed to support PL/pgSQL syntax for
-		 * other loops and the LOOP statement itself all unambiguous contexts.
-		 */
-		case K_LOOP:
 		case K_MOVE:
 		case K_OPEN:
 		case K_PERFORM:
@@ -2836,6 +2860,13 @@ is_terminator(int tok, bool first)
 		case K_SET:
 		case K_WHILE:
 		case LESS_LESS:			/* Optional label for many statements */
+		/*
+		 * These are not core TSQL statements but are needed to support dual
+		 * syntax, in particular, the PL/pgSQL syntax for their respective
+		 * statements.
+		 */
+		case K_THEN:
+		case K_LOOP:
 			return true;
 	}
 
@@ -2851,6 +2882,16 @@ is_terminator(int tok, bool first)
 	}
 
 	return false;
+}
+
+static void
+ignore_opt_semicol(void)
+{
+	int tok;
+
+	tok = yylex();
+	if (tok != ';')
+		pltsql_push_back_token(tok);
 }
 
 static PLTSQL_type *

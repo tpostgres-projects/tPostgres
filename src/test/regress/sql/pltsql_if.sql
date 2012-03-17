@@ -4,9 +4,8 @@
 
 CREATE FUNCTION if_with_semicolon() RETURNS void AS $$
 BEGIN
-    IF true THEN
-        PRINT 'true'
-    END IF;
+    IF true
+        PRINT 'true';
 END
 $$ LANGUAGE pltsql;
 
@@ -14,38 +13,71 @@ SELECT if_with_semicolon();
 
 CREATE FUNCTION if_without_semicolon() RETURNS void AS $$
 BEGIN
-    IF true THEN
+    IF true
         PRINT 'true'
-    END IF
 END
 $$ LANGUAGE pltsql;
 
 SELECT if_without_semicolon();
 
-CREATE FUNCTION if_without_then() RETURNS void AS $$
+CREATE FUNCTION if_with_block() RETURNS void AS $$
 BEGIN
     IF true
-        PRINT 'true'
-    END IF
+        BEGIN
+            PRINT 'true'
+            PRINT 'true'
+        END
 END
 $$ LANGUAGE pltsql;
 
-SELECT if_without_then();
+SELECT if_with_block();
 
-CREATE FUNCTION if_elsif_without_then() RETURNS void AS $$
+CREATE FUNCTION if_else() RETURNS void AS $$
 DECLARE @a int
 BEGIN
     SET @a = 1
     IF 2 > @a
         UPDATE pg_settings SET setting = 'notupdated' WHERE name = 'nonexistent';
-    ELSIF @a = 1
-        SET @a = 2
-    ELSIF @a = 2
-        SET @a = 3
     ELSE
         SET @a = NULL
-    END IF
 END
 $$ LANGUAGE pltsql;
 
-SELECT if_elsif_without_then();
+SELECT if_else();
+
+CREATE FUNCTION if_else_with_blocks() RETURNS void AS $$
+DECLARE @a int
+BEGIN
+    SET @a = 1
+    IF 2 < @a
+        BEGIN
+            UPDATE pg_settings SET setting = 'notupdated' WHERE name = 'nonexistent';
+        END
+    ELSE
+        BEGIN
+            PRINT '2 > @a'
+            SET @a = NULL
+        END
+END
+$$ LANGUAGE pltsql;
+
+SELECT if_else_with_blocks();
+
+CREATE FUNCTION if_else_with_nesting() RETURNS void AS $$
+DECLARE @a int
+BEGIN
+    SET @a = 0
+    IF 2 > @a
+        IF @a = 1
+            PRINT '@a = 1'
+        ELSE
+            PRINT '@a < 1'
+    ELSE
+        BEGIN
+            SET @a = NULL
+            PRINT @a
+        END
+END
+$$ LANGUAGE pltsql;
+
+SELECT if_else_with_nesting();
