@@ -327,7 +327,7 @@ pltsql_yylex(void)
 	else
 	{
 		/*
-		 * Handle "@"-prefixed identifiers specific to TSQL.
+		 * Handle "@"-prefixed and "#"-prefixed identifiers specific to TSQL.
 		 *
 		 * The core scanner treats "@" as an operator, we do not intend to
 		 * modify the core scanner for one language especially when it will
@@ -336,7 +336,7 @@ pltsql_yylex(void)
 		 * Value) is unary.
 		 *
 		 * TSQL does not support this unary operator, and instead, relies on the
-		 * ABS() function that we support already.
+		 * ABS() function that we already support.
 		 */
 		if (tok1 == Op)
 		{
@@ -344,23 +344,40 @@ pltsql_yylex(void)
 			 * Make sure we are resilient to the core scanner returning multiple
 			 * operators as a single Op token.
 			 */
-			if (aux1.leng > 1 && aux1.lval.str[aux1.leng - 1] == '@')
+			if (aux1.leng > 1 && (aux1.lval.str[aux1.leng - 1] == '@' ||
+								 (aux1.lval.str[aux1.leng - 1] == '#')))
 			{
 				int			 tok2;
+				int			 tok3;
 				TokenAuxData aux2;
+				TokenAuxData aux3;
 
-				/* Separate out "@" and push it back. */
-				tok2 = Op;
-				aux2.lval.str = "@";
-				aux2.leng = 1;
-				aux2.lloc = aux1.lloc + (aux1.leng - 1);
+				tok2 = internal_yylex(&aux2);
 				push_back_token(tok2, &aux2);
 
-				/* Now we can remove "@" from the token. */
-				aux1.lval.str[aux1.leng - 1] = '\0';
-				aux1.leng--;
+				if (tok2 == IDENT)
+				{
+					/* Separate out the prefix char and push it back. */
+					if (aux1.lval.str[aux1.leng - 1] == '#')
+					{
+						tok3 = '#';
+					}
+					else
+					{
+						tok3 = Op;
+						aux3.lval.str = "@";
+					}
+
+					aux3.leng = 1;
+					aux3.lloc = aux1.lloc + (aux1.leng - 1);
+					push_back_token(tok3, &aux3);
+
+					/* Now we can remove the prefix char from the token. */
+					aux1.lval.str[aux1.leng - 1] = '\0';
+					aux1.leng--;
+				}
 			}
-			else if (aux1.lval.str[0] == '@')
+			else if (aux1.leng == 1 && aux1.lval.str[0] == '@')
 			{
 				int			tok2;
 				TokenAuxData aux2;
@@ -387,8 +404,47 @@ pltsql_yylex(void)
 						aux1.lval.str = var_word.data;
 					}
 				}
+				else
+				{
+					push_back_token(tok2, &aux2);
+				}
 			}
 		}
+		else if (tok1 == '#')
+		{
+			int			 tok2;
+			TokenAuxData aux2;
+
+			tok2 = internal_yylex(&aux2);
+
+			/* #<IDENT>: Read ahead and return as a single token. */
+			if (tok2 == IDENT && !(ScanKeywordLookup(aux2.lval.word.ident,
+											 unreserved_keywords,
+											 num_unreserved_keywords)))
+			{
+				StringInfoData	var_word;
+
+				initStringInfo(&var_word);
+				appendStringInfoString(&var_word, "#");
+				appendStringInfoString(&var_word, aux2.lval.str);
+
+				if (pltsql_parse_word(var_word.data,
+				                      var_word.data,
+				                      &aux1.lval.wdatum,
+				                      &aux1.lval.word))
+					tok1 = T_DATUM; /* TSQL allows #-prefixed cursor variables */
+				else
+				{
+					tok1 = T_WORD;
+					aux1.lval.str = var_word.data;
+				}
+			}
+			else
+			{
+				push_back_token(tok2, &aux2);
+			}
+		}
+			
 		/* Not a potential pltsql variable name, just return the data */
 	}
 

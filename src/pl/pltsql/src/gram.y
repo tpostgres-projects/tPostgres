@@ -45,6 +45,7 @@
 #define YYMALLOC palloc
 #define YYFREE   pfree
 
+#define TEMPOBJ_QUALIFIER "TEMPORARY "
 
 typedef struct
 {
@@ -103,10 +104,12 @@ static PLTSQL_expr * read_sql_expression2_bos(int until, int until2,
 											  const char *expected,
 											  int *endtoken);
 static bool is_terminator(int tok, bool first);
+static bool word_matches(int tok, const char *pattern);
 static	PLTSQL_expr	*read_sql_stmt(const char *sqlstart);
 static	PLTSQL_expr	*read_sql_stmt_bos(const char *sqlstart);
 static	PLTSQL_type	*read_datatype(int tok);
-static	PLTSQL_stmt	*make_execsql_stmt(int firsttoken, int location);
+static	PLTSQL_stmt	*make_execsql_stmt(int firsttoken, int location,
+										 PLword *firstword);
 static	PLTSQL_stmt_fetch *read_fetch_direction(void);
 static	void			 complete_direction(PLTSQL_stmt_fetch *fetch,
 											bool *check_FROM);
@@ -1954,7 +1957,7 @@ loop_body		: proc_sect K_END K_LOOP opt_label ';'
  */
 stmt_execsql	: K_INSERT
 					{
-						$$ = make_execsql_stmt(K_INSERT, @1);
+						$$ = make_execsql_stmt(K_INSERT, @1, NULL);
 					}
 				| T_WORD
 					{
@@ -1964,7 +1967,7 @@ stmt_execsql	: K_INSERT
 						pltsql_push_back_token(tok);
 						if (tok == '=' || tok == COLON_EQUALS || tok == '[')
 							word_is_not_variable(&($1), @1);
-						$$ = make_execsql_stmt(T_WORD, @1);
+						$$ = make_execsql_stmt(T_WORD, @1, &($1));
 					}
 				| T_CWORD
 					{
@@ -1974,7 +1977,7 @@ stmt_execsql	: K_INSERT
 						pltsql_push_back_token(tok);
 						if (tok == '=' || tok == COLON_EQUALS || tok == '[')
 							cword_is_not_variable(&($1), @1);
-						$$ = make_execsql_stmt(T_CWORD, @1);
+						$$ = make_execsql_stmt(T_CWORD, @1, NULL);
 					}
 				;
 
@@ -2782,7 +2785,7 @@ append_if_tsql_identifier(int tok, int start_len, int start_loc,
 	{
 		tsql_ident_len = strlen(ident);
 
-		if (tsql_ident_len > 0 && ident[0] == '@')
+		if (tsql_ident_len > 0 && (ident[0] == '@' || ident[0] == '#'))
 		{
 			tident_ref = palloc(sizeof(tsql_ident_ref));
 			tident_ref->location = (start_len - 1) +
@@ -2871,17 +2874,9 @@ is_terminator(int tok, bool first)
 	}
 
 	/* List of words that are not tokens but mark the beginning of a statement. */
-	if (tok == T_WORD)
-	{
-		if (strcasecmp(yylval.word.ident, "UPDATE") == 0)
-			return true;
-		else if (strcasecmp(yylval.word.ident, "DELETE") == 0)
-			return true;
-		else if (!first && (strcasecmp(yylval.word.ident, "SELECT") == 0))
-			return true;
-	}
-
-	return false;
+	return word_matches(tok, "UPDATE") ||
+		   word_matches(tok, "DELETE") ||
+		   (!first && word_matches(tok, "SELECT"));
 }
 
 static void
@@ -2892,6 +2887,12 @@ ignore_opt_semicol(void)
 	tok = yylex();
 	if (tok != ';')
 		pltsql_push_back_token(tok);
+}
+
+static bool
+word_matches(int tok, const char *pattern)
+{
+	return ((tok == T_WORD) && (strcasecmp(yylval.word.ident, pattern) == 0));
 }
 
 static PLTSQL_type *
@@ -3016,7 +3017,7 @@ read_datatype(int tok)
 }
 
 static PLTSQL_stmt *
-make_execsql_stmt(int firsttoken, int location)
+make_execsql_stmt(int firsttoken, int location, PLword *firstword)
 {
 	StringInfoData		ds;
 	IdentifierLookup	save_IdentifierLookup;
@@ -3028,9 +3029,11 @@ make_execsql_stmt(int firsttoken, int location)
 	int					prev_tok;
 	bool				have_into = false;
 	bool				have_strict = false;
+	bool				have_temptbl = false;
+	bool				is_prev_tok_create = false;
 	int					into_start_loc = -1;
 	int					into_end_loc = -1;
-	int					start_loc = yylloc;
+	int					temptbl_loc = -1;
 	List				*tsql_idents = NIL;
 
 	initStringInfo(&ds);
@@ -3048,6 +3051,8 @@ make_execsql_stmt(int firsttoken, int location)
 	 * containing an INSERT statement.
 	 */
 	tok = firsttoken;
+	is_prev_tok_create =
+		(firstword && (strcasecmp(firstword->ident, "CREATE") == 0));
 	for (;;)
 	{
 		prev_tok = tok;
@@ -3056,7 +3061,10 @@ make_execsql_stmt(int firsttoken, int location)
 			into_end_loc = yylloc;		/* token after the INTO part */
 		if (tok == ';')
 			break;
-		tsql_idents = append_if_tsql_identifier(tok, 0, start_loc, tsql_idents);
+		tsql_idents = append_if_tsql_identifier(tok,
+		                                        (have_temptbl ?
+		                                         strlen(TEMPOBJ_QUALIFIER) : 0),
+		                                        location, tsql_idents);
 		if (tok == 0)
 			yyerror("unexpected end of function definition");
 
@@ -3070,6 +3078,24 @@ make_execsql_stmt(int firsttoken, int location)
 			read_into_target(&rec, &row, &have_strict);
 			pltsql_IdentifierLookup = IDENTIFIER_LOOKUP_EXPR;
 		}
+		/*
+		 * We need to identify a CREATE TABLE <#ident> as a local temporary
+		 * table so we can translate it into a CREATE TEMPORARY TABLE statement
+		 * later.
+		 */
+		if (is_prev_tok_create && word_matches(tok, "TABLE"))
+		{
+			temptbl_loc = yylloc;
+
+			tok = yylex();
+			if (tok == T_WORD && (!yylval.word.quoted) &&
+			    (yylval.word.ident[0] == '#'))
+				have_temptbl = true;
+
+			pltsql_push_back_token(tok);
+		}
+		/* See the call to check_sql_expr below if you change this */
+		is_prev_tok_create = false;
 	}
 
 	pltsql_IdentifierLookup = save_IdentifierLookup;
@@ -3086,7 +3112,23 @@ make_execsql_stmt(int firsttoken, int location)
 		pltsql_append_source_text(&ds, into_end_loc, yylloc);
 	}
 	else
-		pltsql_append_source_text(&ds, location, yylloc);
+	{
+		if (have_temptbl)
+		{
+			/*
+			 * We have a local temporary table identifier after the CREATE
+			 * TABLE tokens, we need to transform CREATE TABLE -> CREATE
+			 * TEMPORARY TABLE in this case.
+			 */
+			pltsql_append_source_text(&ds, location, temptbl_loc);
+			appendStringInfoString(&ds, TEMPOBJ_QUALIFIER);
+			pltsql_append_source_text(&ds, temptbl_loc, yylloc);
+		}
+		else
+		{
+			pltsql_append_source_text(&ds, location, yylloc);
+		}
+	}
 
 	/* trim any trailing whitespace, for neatness */
 	while (ds.len > 0 && scanner_isspace(ds.data[ds.len - 1]))
@@ -3100,7 +3142,15 @@ make_execsql_stmt(int firsttoken, int location)
 	expr->ns			= pltsql_ns_top();
 	pfree(ds.data);
 
-	check_sql_expr(expr->query, location, 0);
+	/*
+	 * If have_temptbl is true, the first two tokens were valid so we expect
+	 * that check_sql_expr will raise errors from a location occurring after
+	 * the TEMPORARY token.  Because the original statement did not include it,
+	 * we offset the error location with its length so it points back to the
+	 * correct location in the original source.
+	 */
+	check_sql_expr(expr->query, location, (have_temptbl ?
+	                                       strlen(TEMPOBJ_QUALIFIER) : 0));
 
 	execsql = palloc(sizeof(PLTSQL_stmt_execsql));
 	execsql->cmd_type = PLTSQL_STMT_EXECSQL;
