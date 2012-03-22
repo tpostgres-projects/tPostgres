@@ -119,7 +119,9 @@ test: pltsql_print
 test: pltsql_if
 test: pltsql_at_prefixed_vars
 test: pltsql_optsemicolterm
+test: pltsql_localtempobjs
 test: pltsql_plpgsqlsubset
+test: pltsql_sanitychecks
 test: copy2
 test: temp
 test: domain

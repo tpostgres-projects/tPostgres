@@ -214,7 +214,11 @@ static void free_params_data(PreparedParamsData *ppd);
 static Portal exec_dynquery_with_params(PLTSQL_execstate *estate,
 						  PLTSQL_expr *dynquery, List *params,
 						  const char *portalname, int cursorOptions);
-
+static char * transform_tsql_temp_tables(char * dynstmt);
+static bool is_char_identstart(char c);
+static bool is_char_identpart(char c);
+static char * next_word(char *dyntext);
+static bool is_next_temptbl(char *dyntext);
 
 /* ----------
  * pltsql_exec_function	Called by the call handler for
@@ -3239,6 +3243,9 @@ exec_stmt_dynexecute(PLTSQL_execstate *estate,
 	/* copy it out of the temporary context before we clean up */
 	querystr = pstrdup(querystr);
 
+	/* carry out any local temporary table transformations that may be required */
+	querystr = transform_tsql_temp_tables(querystr);
+
 	exec_eval_cleanup(estate);
 
 	/*
@@ -6188,4 +6195,88 @@ exec_dynquery_with_params(PLTSQL_execstate *estate,
 	pfree(querystr);
 
 	return portal;
+}
+
+static char *
+transform_tsql_temp_tables(char * dynstmt)
+{
+	StringInfoData ds;
+	char		   *cp;
+	char		   *word;
+	char		   *prev_word;
+
+	initStringInfo(&ds);
+
+	for (cp = dynstmt; *cp; cp++)
+	{
+		if (cp[0] == '#' && is_char_identstart(cp[1]))
+		{
+			/*
+			 * Quote this local temporary table identifier.  next_word stops as
+			 * soon as it encounters a non-ident character such as '#', we point
+			 * it to the next character as the start of word while specifying
+			 * the '#' prefix explicitly in the format string.
+			 */
+			word = next_word(cp+1);
+			appendStringInfo(&ds, "\"#%s\"", word);
+			cp += strlen(word);
+		}
+		else if (is_char_identstart(cp[0]))
+		{
+			word = next_word(cp);
+			cp += (strlen(word) - 1);
+
+			/* CREATE TABLE #<ident> -> CREATE TEMPORARY TABLE #<ident> */
+			if ((strcasecmp(prev_word, "CREATE") == 0) &&
+			    (strcasecmp(word, "TABLE") == 0) &&
+				is_next_temptbl(cp))
+			{
+				appendStringInfo(&ds, "TEMPORARY %s", word);
+			}
+			else
+				appendStringInfoString(&ds, word);
+
+			prev_word = word;
+		}
+		else
+			appendStringInfoChar(&ds, *cp);
+	}
+
+	return ds.data;
+}
+
+static char *
+next_word(char *dyntext)
+{
+	StringInfoData ds;
+	initStringInfo(&ds);
+
+	while (*dyntext && is_char_identpart(*dyntext))
+		appendStringInfoChar(&ds, *(dyntext++));
+
+	return ds.data;
+}
+
+static bool
+is_next_temptbl(char *dyntext)
+{
+	while (*++dyntext && scanner_isspace(*dyntext)); /* skip whitespace */
+
+	return (dyntext[0] == '#' && is_char_identstart(dyntext[1]));
+}
+
+static bool
+is_char_identstart(char c)
+{
+	return ((c == '_')             ||
+			(c >= 'A' && c <= 'Z') ||
+	        (c >= 'a' && c <= 'z') ||
+	        (c >= '\200' && c <= '\377'));
+}
+
+static bool
+is_char_identpart(char c)
+{
+	return ((is_char_identstart(c)) ||
+	        (c >= '0' && c <= '9'));
 }
