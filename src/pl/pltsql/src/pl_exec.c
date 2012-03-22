@@ -3240,12 +3240,10 @@ exec_stmt_dynexecute(PLTSQL_execstate *estate,
 	/* Get the C-String representation */
 	querystr = convert_value_to_string(estate, query, restype);
 
-	/* copy it out of the temporary context before we clean up */
-	querystr = pstrdup(querystr);
-
 	/* carry out any local temporary table transformations that may be required */
 	querystr = transform_tsql_temp_tables(querystr);
 
+	/* the transformation yielded a new querystr copy so we can clean up */
 	exec_eval_cleanup(estate);
 
 	/*
