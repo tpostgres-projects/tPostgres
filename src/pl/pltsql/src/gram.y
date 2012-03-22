@@ -3079,9 +3079,8 @@ make_execsql_stmt(int firsttoken, int location, PLword *firstword)
 			pltsql_IdentifierLookup = IDENTIFIER_LOOKUP_EXPR;
 		}
 		/*
-		 * We need to identify a CREATE TABLE <#ident> as a local temporary
-		 * table so we can translate it into a CREATE TEMPORARY TABLE statement
-		 * later.
+		 * We need to identify CREATE TABLE <#ident> as a local temporary table
+		 * so we can translate it to a CREATE TEMPORARY TABLE statement later.
 		 */
 		if (is_prev_tok_create && word_matches(tok, "TABLE"))
 		{
