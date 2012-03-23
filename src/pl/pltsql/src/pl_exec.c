@@ -1448,16 +1448,8 @@ exec_stmt_getdiag(PLTSQL_execstate *estate, PLTSQL_stmt_getdiag *stmt)
 	foreach(lc, stmt->diag_items)
 	{
 		PLTSQL_diag_item *diag_item = (PLTSQL_diag_item *) lfirst(lc);
-		PLTSQL_datum *var;
+		PLTSQL_datum *var = estate->datums[diag_item->target];
 		bool		isnull = false;
-
-		if (diag_item->target <= 0)
-			continue;
-
-		var = estate->datums[diag_item->target];
-
-		if (var == NULL)
-			continue;
 
 		switch (diag_item->kind)
 		{
