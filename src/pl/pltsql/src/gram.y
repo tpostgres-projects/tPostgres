@@ -2778,8 +2778,8 @@ append_if_tsql_identifier(int tok, int start_len, int start_loc,
 	}
 
 	/*
-	 * Create and append a reference to this word if it is a TSQL
-	 * at-prefixed identifier.
+	 * Create and append a reference to this word if it is a TSQL (at-prefixed)
+	 * identifier.
 	 */
 	if (ident && !is_ident_quoted)
 	{
