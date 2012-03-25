@@ -6204,6 +6204,7 @@ transform_tsql_temp_tables(char * dynstmt)
 	char		   *prev_word;
 
 	initStringInfo(&ds);
+	prev_word = NULL;
 
 	for (cp = dynstmt; *cp; cp++)
 	{
@@ -6225,7 +6226,7 @@ transform_tsql_temp_tables(char * dynstmt)
 			cp += (strlen(word) - 1);
 
 			/* CREATE TABLE #<ident> -> CREATE TEMPORARY TABLE #<ident> */
-			if ((strcasecmp(prev_word, "CREATE") == 0) &&
+			if ((prev_word && (strcasecmp(prev_word, "CREATE") == 0)) &&
 			    (strcasecmp(word, "TABLE") == 0) &&
 				is_next_temptbl(cp))
 			{
