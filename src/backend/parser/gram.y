@@ -2581,6 +2581,68 @@ columnDef:	ColId Typename create_generic_options ColQualList
 									 yyscanner);
 					$$ = (Node *)n;
 				}
+			| ColId Typename IDENTITY_P create_generic_options ColQualList
+				{
+					ColumnDef *n        = makeNode(ColumnDef);
+					char      *typename = NULL;
+					n->colname          = $1;
+					n->typeName         = NULL;
+
+					/*
+					 * The IDENTITY modifier is valid only for the primitive
+					 * integer data types, handle those whether qualified or
+					 * unqualified.  Error out on any other data type.
+					 */
+
+					if (list_length($2->names) == 1)
+					{
+						typename = strVal(linitial($2->names));
+					}
+					else if (list_length($2->names) == 2)
+					{
+						char *schema = strVal(linitial($2->names));
+						if (strcmp(schema, "pg_catalog") == 0)
+							typename = strVal(lsecond($2->names));
+					}
+
+					if (typename)
+					{
+						if (strcmp(typename, "int2") == 0)
+						{
+							n->typeName = makeTypeName("serial2");
+							n->typeName->location = @2;
+						}
+						else if (strcmp(typename, "int4") == 0)
+						{
+							n->typeName = makeTypeName("serial4");
+							n->typeName->location = @2;
+						}
+						else if (strcmp(typename, "int8") == 0)
+						{
+							n->typeName = makeTypeName("serial8");
+							n->typeName->location = @2;
+						}
+					}
+
+					if (!n->typeName)
+						ereport(ERROR,
+						        (errcode(ERRCODE_SYNTAX_ERROR),
+						         errmsg("Modifier IDENTITY invalid for type"),
+						         parser_errposition(@2)));
+
+					n->inhcount = 0;
+					n->is_local = true;
+					n->is_not_null = false;
+					n->is_from_type = false;
+					n->storage = 0;
+					n->raw_default = NULL;
+					n->cooked_default = NULL;
+					n->collOid = InvalidOid;
+					n->fdwoptions = $4;
+					SplitColQualList($5, &n->constraints, &n->collClause,
+									 yyscanner);
+					$$ = (Node *)n;
+				}
 		;
 
 columnOptions:	ColId WITH OPTIONS ColQualList
