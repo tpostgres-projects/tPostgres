@@ -3152,71 +3152,71 @@ select raise_test();
 
 drop function raise_test();
 
--- test CASE statement
+-- test CASE statement -- Not supported in TSQL
 
-create or replace function case_test(bigint) returns text as $$
-declare a int = 10;
-        b int = 1;
-begin
-  case $1
-    when 1 then
-      return 'one';
-    when 2 then
-      return 'two';
-    when 3,4,3+5 then
-      return 'three, four or eight';
-    when a then
-      return 'ten';
-    when a+b, a+b+1 then
-      return 'eleven, twelve';
-  end case;
-end;
-$$ language pltsql immutable;
+-- create or replace function case_test(bigint) returns text as $$
+-- declare a int = 10;
+--         b int = 1;
+-- begin
+--   case $1
+--     when 1 then
+--       return 'one';
+--     when 2 then
+--       return 'two';
+--     when 3,4,3+5 then
+--       return 'three, four or eight';
+--     when a then
+--       return 'ten';
+--     when a+b, a+b+1 then
+--       return 'eleven, twelve';
+--   end case;
+-- end;
+-- $$ language pltsql immutable;
 
-select case_test(1);
-select case_test(2);
-select case_test(3);
-select case_test(4);
-select case_test(5); -- fails
-select case_test(8);
-select case_test(10);
-select case_test(11);
-select case_test(12);
-select case_test(13); -- fails
+-- select case_test(1);
+-- select case_test(2);
+-- select case_test(3);
+-- select case_test(4);
+-- select case_test(5); -- fails
+-- select case_test(8);
+-- select case_test(10);
+-- select case_test(11);
+-- select case_test(12);
+-- select case_test(13); -- fails
 
-create or replace function catch() returns void as $$
-begin
-  raise notice '%', case_test(6);
-exception
-  when case_not_found then
-    raise notice 'caught case_not_found % %', SQLSTATE, SQLERRM;
-end
-$$ language pltsql;
+-- create or replace function catch() returns void as $$
+-- begin
+--   raise notice '%', case_test(6);
+-- exception
+--   when case_not_found then
+--     raise notice 'caught case_not_found % %', SQLSTATE, SQLERRM;
+-- end
+-- $$ language pltsql;
 
-select catch();
+-- select catch();
 
 -- test the searched variant too, as well as ELSE
-create or replace function case_test(bigint) returns text as $$
-declare a int = 10;
-begin
-  case
-    when $1 = 1 then
-      return 'one';
-    when $1 = a + 2 then
-      return 'twelve';
-    else
-      return 'other';
-  end case;
-end;
-$$ language pltsql immutable;
+-- create or replace function case_test(bigint) returns text as $$
+-- declare a int = 10;
+-- begin
+--   case
+--     when $1 = 1 then
+--       return 'one';
+--     when $1 = a + 2 then
+--       return 'twelve';
+--     else
+--       return 'other';
+--   end case;
+-- end;
+-- $$ language pltsql immutable;
 
-select case_test(1);
-select case_test(2);
-select case_test(12);
-select case_test(13);
+-- select case_test(1);
+-- select case_test(2);
+-- select case_test(12);
+-- select case_test(13);
 
-drop function catch();
-drop function case_test(bigint);
+-- drop function catch();
+-- drop function case_test(bigint);
 
 -- test variadic functions
 

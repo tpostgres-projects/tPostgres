@@ -158,6 +158,9 @@ extern void core_yyset_column(int column_no, yyscan_t yyscanner);
 %x xui
 %x xus
 %x xeu
+%x xpb
+
+%s sp
 
 /*
  * In order to make the world safe for Windows and Mac clients as well as
@@ -410,6 +413,35 @@ other			.
 				}
 
 <xc><<EOF>>		{ yyerror("unterminated /* comment"); }
+
+<xpb>[eE][nN][dD]{whitespace}*([iI][fF]|[cC][aA][sS][eE]|[lL][oO][oO][pP]) {
+                    addlit(yytext, yyleng, yyscanner);
+                 }
+
+<xpb>[bB][eE][gG][iI][nN] {
+						    if (yyextra->blockdepth == -1)
+						        yyextra->blockdepth = 0;
+						    yyextra->blockdepth++;
+                            addlit(yytext, yyleng, yyscanner);
+                         }
+
+<xpb>[eE][nN][dD]         {
+                            yyextra->blockdepth--;
+                            if (yyextra->blockdepth < 0)
+                                yyerror("END without a corresponding BEGIN");
+                            addlit(yytext, yyleng, yyscanner);
+                            if (yyextra->blockdepth == 0)
+                            {
+                                BEGIN(INITIAL);
+                                yylval->str = litbufdup(yyscanner);
+                                yyextra->is_proc_active = false;
+                                return SCONST;
+                            }
+                         }
+
+<xpb>(.|{whitespace})        { addlit(yytext, yyleng, yyscanner); }
+
+<xpb><<EOF>>     { yyerror("unterminated procedure"); }
 
 {xbstart}		{
 					/* Binary bit type.
@@ -759,6 +791,10 @@ other			.
 
 {self}			{
 					SET_YYLLOC();
+                    if (yyextra->is_proc_active &&
+                        yyextra->paren_state == NO_PAREN &&
+                        yytext[0] == '(')
+                        yyextra->paren_state = SEEN_PAREN;
 					return yytext[0];
 				}
 
@@ -888,6 +924,12 @@ other			.
 					return FCONST;
 				}
 
+<sp>"@"{identifier}   {
+                    char *ident;
+                    ident = downcase_truncate_identifier(yytext, yyleng, true);
+					yylval->str = ident;
+					return IDENT;
+                }
 
 {identifier}	{
 					const ScanKeyword *keyword;
@@ -901,6 +943,32 @@ other			.
 												yyextra->num_keywords);
 					if (keyword != NULL)
 					{
+                        if (yyextra->is_proc_active)
+                        {
+                            if (yyextra->paren_state == NO_PAREN)
+                            {
+                                yyless(0);
+                                yyextra->paren_state = SENT_OP_PAREN;
+                                yytext[0] = '(';
+                                return yytext[0];
+                            }
+                            else if (yyextra->paren_state == SENT_OP_PAREN)
+                            {
+                                yyless(0);
+                                yyextra->paren_state = SENT_CL_PAREN;
+                                yytext[0] = ')';
+                                return yytext[0];
+                            }
+
+                            Assert(yyextra->paren_state == SENT_CL_PAREN);
+
+                            if (keyword->value == AS)
+                            {
+                                BEGIN(xpb); /* Exclusive state for CREATE [OR
+	                                        * REPLACE] PROCEDURE ... AS */
+                                startlit();
+                            }
+                        }
 						yylval->keyword = keyword->name;
 						return keyword->value;
 					}
@@ -909,6 +977,15 @@ other			.
 					 * No.  Convert the identifier to lower case, and truncate
 					 * if necessary.
 					 */
+                    if (yyextra->is_proc_active)
+                    {
+                        if (yyextra->paren_state == UNINITIALIZED)
+                        {
+                            yyextra->paren_state = NO_PAREN;
+                            BEGIN(sp);
+                        }
+                    }
+
 					ident = downcase_truncate_identifier(yytext, yyleng, true);
 					yylval->str = ident;
 					return IDENT;
@@ -1022,6 +1099,9 @@ scanner_init(const char *str,
 
 	yyext->keywords = keywords;
 	yyext->num_keywords = num_keywords;
+    yyext->is_proc_active = false;
+    yyext->paren_state = UNINITIALIZED;
+    yyext->blockdepth = -1;
 
 	/*
 	 * Make a scan buffer with special termination needed by flex.
@@ -1434,4 +1514,10 @@ core_yyfree(void *ptr, core_yyscan_t yyscanner)
 {
 	if (ptr)
 		pfree(ptr);
+}
+
+void
+begin_proc(core_yyscan_t yyscanner)
+{
+    yyextra->is_proc_active = true;
 }

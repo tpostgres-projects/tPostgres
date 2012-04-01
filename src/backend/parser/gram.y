@@ -247,7 +247,7 @@ static void processCASbits(int cas_bits, int location, const char *constrType,
 
 %type <ival>	opt_lock lock_type cast_context
 %type <ival>	vacuum_option_list vacuum_option_elem
-%type <boolean>	opt_force opt_or_replace
+%type <boolean>	opt_force opt_or_replace create_or_replace_proc
 				opt_grant_grant_option opt_grant_admin_option
 				opt_nowait opt_if_exists opt_with_data
 
@@ -6021,6 +6021,45 @@ CreateFunctionStmt:
 					n->withClause = $7;
 					$$ = (Node *)n;
 				}
+			| create_or_replace_proc func_name func_args_with_defaults
+			  createfunc_opt_list opt_definition
+				{
+					ListCell       *opt;
+					bool            withlang = false;
+
+					CreateFunctionStmt *n = makeNode(CreateFunctionStmt);
+					n->replace = $1;
+					n->funcname = $2;
+					n->parameters = $3;
+					/*
+					 * TODO: Should really be int.  Will need to look at
+					 * "control reached end of function without RETURN" in
+					 * PL/TSQL.
+					 */
+					n->returnType = makeTypeName("void");
+					n->options = $4;
+					foreach(opt, n->options)
+					{
+						DefElem *defel = (DefElem *) lfirst(opt);
+
+						if (strcmp(defel->defname, "language") == 0)
+						{
+							withlang = true;
+							break;
+						}
+					}
+
+					/* TODO: Make the default language configurable. */
+					if (!withlang)
+						lappend(n->options, makeDefElem("language",
+											(Node *)makeString("pltsql")));
+					n->withClause = $5;
+					$$ = (Node *)n;
+				}
+		;
+
+create_or_replace_proc: CREATE opt_or_replace PROCEDURE
+				{ begin_proc(yyscanner); $$ = $2; }
 		;
 
 opt_or_replace:

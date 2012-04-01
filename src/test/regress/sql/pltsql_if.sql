@@ -2,21 +2,19 @@
 -- PLTSQL -- IF Statement
 --
 
-CREATE FUNCTION if_with_semicolon() RETURNS void AS $$
+CREATE PROCEDURE if_with_semicolon() AS
 BEGIN
     IF true
         PRINT 'true';
 END
-$$ LANGUAGE pltsql;
 
 SELECT if_with_semicolon();
 
-CREATE FUNCTION if_without_semicolon() RETURNS void AS $$
+CREATE PROCEDURE if_without_semicolon() AS
 BEGIN
     IF true
         PRINT 'true'
 END
-$$ LANGUAGE pltsql;
 
 SELECT if_without_semicolon();
 

@@ -2838,10 +2838,9 @@ is_terminator(int tok, bool first)
 {
 	switch (tok)
 	{
-		/* Ambiguous tokens not included: NULL */
+		/* Ambiguous tokens not included: NULL, CASE (which will be removed) */
 		case ';':
 		case K_BEGIN:
-		case K_CASE:			/* Ambiguity? (CASE expression) */
 		case K_CLOSE:
 		case K_DECLARE:
 		case K_ELSE:

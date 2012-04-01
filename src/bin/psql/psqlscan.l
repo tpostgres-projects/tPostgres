@@ -94,6 +94,8 @@ typedef struct PsqlScanStateData
 	int			paren_depth;	/* depth of nesting in parentheses */
 	int			xcdepth;		/* depth of nesting in slash-star comments */
 	char	   *dolqstart;		/* current $foo$ quote start string */
+
+    int         blockdepth;     /* depth of block nesting in procedures */
 } PsqlScanStateData;
 
 static PsqlScanState cur_state;	/* current state while active */
@@ -183,6 +185,7 @@ static void escape_variable(bool as_ident);
 %x xdolq
 %x xui
 %x xus
+%x xpb
 /* Additional exclusive states for psql only: lex backslash commands */
 %x xslashcmd
 %x xslashargstart
@@ -457,6 +460,43 @@ other			.
 <xc>\*+			{
 					ECHO;
 				}
+
+[cC][rR][eE][aA][tT][eE]{whitespace}*[pP][rR][oO][cC][eE][dD][uU][rR][eE] {
+                    cur_state->blockdepth = -1;
+                    BEGIN(xpb);
+                    ECHO;
+}
+
+[cC][rR][eE][aA][tT][eE]{whitespace}*[oO][rR]{whitespace}*[rR][eE][pP][lL][aA][cC][eE]{whitespace}*[pP][rR][oO][cC][eE][dD][uU][rR][eE] {
+                    cur_state->blockdepth = -1;
+                    BEGIN(xpb);
+                    ECHO;
+}
+
+<xpb>[eE][nN][dD]{whitespace}*([iI][fF]|[cC][aA][sS][eE]|[lL][oO][oO][pP]) {
+                    ECHO;
+                 }
+
+<xpb>[bB][eE][gG][iI][nN] {
+						    if (cur_state->blockdepth == -1)
+						        cur_state->blockdepth = 0;
+						    cur_state->blockdepth++;
+                            ECHO;
+                         }
+
+<xpb>[eE][nN][dD]         {
+                            cur_state->blockdepth--;
+                            ECHO;
+                            if (cur_state->blockdepth == 0)
+                            {
+                                BEGIN(INITIAL);
+                                return LEXRES_SEMI;
+                            }
+                         }
+
+<xpb>(.|{whitespace})        { ECHO; }
+
+<xpb><<EOF>>     { return LEXRES_EOL; }
 
 {xbstart}		{
 					BEGIN(xb);
@@ -1327,6 +1367,10 @@ psql_scan(PsqlScanState state,
 					result = PSCAN_INCOMPLETE;
 					*prompt = PROMPT_SINGLEQUOTE;
 					break;
+                case xpb:
+                    result = PSCAN_INCOMPLETE;
+                    *prompt = PROMPT_DOLLARQUOTE;
+                    break;
 				default:
 					/* can't get here */
 					fprintf(stderr, "invalid YY_START\n");
@@ -1392,6 +1436,7 @@ psql_scan_reset(PsqlScanState state)
 	state->start_state = INITIAL;
 	state->paren_depth = 0;
 	state->xcdepth = 0;			/* not really necessary */
+    state->blockdepth = 0;
 	if (state->dolqstart)
 		free(state->dolqstart);
 	state->dolqstart = NULL;

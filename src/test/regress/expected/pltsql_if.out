@@ -1,12 +1,11 @@
 --
 -- PLTSQL -- IF Statement
 --
-CREATE FUNCTION if_with_semicolon() RETURNS void AS $$
+CREATE PROCEDURE if_with_semicolon() AS
 BEGIN
     IF true
         PRINT 'true';
 END
-$$ LANGUAGE pltsql;
 SELECT if_with_semicolon();
 INFO:  true
  if_with_semicolon 
@@ -14,12 +13,11 @@ INFO:  true
  
 (1 row)
 
-CREATE FUNCTION if_without_semicolon() RETURNS void AS $$
+CREATE PROCEDURE if_without_semicolon() AS
 BEGIN
     IF true
         PRINT 'true'
 END
-$$ LANGUAGE pltsql;
 SELECT if_without_semicolon();
 INFO:  true
  if_without_semicolon 

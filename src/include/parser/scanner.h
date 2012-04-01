@@ -56,6 +56,15 @@ typedef union core_YYSTYPE
  * numbers assigned to them (specifically, IDENT = 258 and so on).
  */
 
+typedef enum proc_decl_paren_state
+{
+	UNINITIALIZED = 0,
+	NO_PAREN = 1,
+	SEEN_PAREN = 2,
+	SENT_OP_PAREN = 3,
+	SENT_CL_PAREN = 4
+} paren_state;
+
 /*
  * The YY_EXTRA data that a flex scanner allows us to pass around.
  * Private state needed by the core scanner goes here.	Note that the actual
@@ -97,6 +106,11 @@ typedef struct core_yy_extra_type
 	/* state variables for literal-lexing warnings */
 	bool		warn_on_first_escape;
 	bool		saw_non_ascii;
+
+	/* state variables for procedure body processing */
+	bool		is_proc_active;
+	paren_state paren_state;
+	int			blockdepth;
 } core_yy_extra_type;
 
 /*
@@ -115,5 +129,6 @@ extern int core_yylex(core_YYSTYPE *lvalp, YYLTYPE *llocp,
 		   core_yyscan_t yyscanner);
 extern int	scanner_errposition(int location, core_yyscan_t yyscanner);
 extern void scanner_yyerror(const char *message, core_yyscan_t yyscanner);
+extern void begin_proc(core_yyscan_t yyscanner);
 
 #endif   /* SCANNER_H */
