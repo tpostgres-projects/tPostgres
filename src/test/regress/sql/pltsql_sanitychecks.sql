@@ -4,6 +4,9 @@
 --
 --
 
--- The count for our various #test* local temporary tables should be zero now as
--- they should not exist anymore.
-SELECT COUNT(relname) FROM pg_class WHERE relname LIKE '#test%';
+-- None of these #test* local temporary tables should be visible to us.
+
+SELECT * FROM "#test";
+SELECT * FROM "#test2";
+SELECT * FROM "#test3";
+SELECT * FROM "#test4";
