@@ -960,10 +960,11 @@ other			.
                                 return yytext[0];
                             }
 
-                            Assert(yyextra->paren_state == SENT_CL_PAREN);
-
                             if (keyword->value == AS)
                             {
+                                Assert(yyextra->paren_state == SENT_CL_PAREN ||
+                                       yyextra->paren_state == SEEN_PAREN);
+
                                 BEGIN(xpb); /* Exclusive state for CREATE [OR
 	                                        * REPLACE] PROCEDURE ... AS */
                                 startlit();
