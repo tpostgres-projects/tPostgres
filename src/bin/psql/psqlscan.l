@@ -47,7 +47,6 @@
 #include "settings.h"
 #include "variables.h"
 
-
 /*
  * We use a stack of flex buffers to handle substitution of psql variables.
  * Each stacked buffer contains the as-yet-unread text from one psql variable.
@@ -96,6 +95,11 @@ typedef struct PsqlScanStateData
 	char	   *dolqstart;		/* current $foo$ quote start string */
 
     int         blockdepth;     /* depth of block nesting in procedures */
+    /*
+     * This state lives across successive input lines, but is always reset at
+     * the end each statement by reset_stmt_state().
+     */
+    char        *prev_word;
 } PsqlScanStateData;
 
 static PsqlScanState cur_state;	/* current state while active */
@@ -127,6 +131,7 @@ static YY_BUFFER_STATE prepare_buffer(const char *txt, int len,
 static void emit(const char *txt, int len);
 static char *extract_substring(const char *txt, int len);
 static void escape_variable(bool as_ident);
+static void reset_stmt_state(void);
 
 #define ECHO emit(yytext, yyleng)
 
@@ -185,7 +190,6 @@ static void escape_variable(bool as_ident);
 %x xdolq
 %x xui
 %x xus
-%x xpb
 /* Additional exclusive states for psql only: lex backslash commands */
 %x xslashcmd
 %x xslashargstart
@@ -195,6 +199,9 @@ static void escape_variable(bool as_ident);
 %x xslashdquote
 %x xslashwholeline
 %x xslashend
+
+/* Start state for PROCEDURE block depth tracking */
+%s spb
 
 /*
  * In order to make the world safe for Windows and Mac clients as well as
@@ -442,7 +449,10 @@ other			.
 <xc>{xcstop}	{
 					if (cur_state->xcdepth <= 0)
 					{
-						BEGIN(INITIAL);
+						if (cur_state->blockdepth == 0)
+							BEGIN(INITIAL);
+						else
+							BEGIN(spb);
 					}
 					else
 						cur_state->xcdepth--;
@@ -461,43 +471,6 @@ other			.
 					ECHO;
 				}
 
-[cC][rR][eE][aA][tT][eE]{whitespace}*[pP][rR][oO][cC][eE][dD][uU][rR][eE] {
-                    cur_state->blockdepth = -1;
-                    BEGIN(xpb);
-                    ECHO;
-}
-
-[cC][rR][eE][aA][tT][eE]{whitespace}*[oO][rR]{whitespace}*[rR][eE][pP][lL][aA][cC][eE]{whitespace}*[pP][rR][oO][cC][eE][dD][uU][rR][eE] {
-                    cur_state->blockdepth = -1;
-                    BEGIN(xpb);
-                    ECHO;
-}
-
-<xpb>[eE][nN][dD]{whitespace}*([iI][fF]|[cC][aA][sS][eE]|[lL][oO][oO][pP]) {
-                    ECHO;
-                 }
-
-<xpb>[bB][eE][gG][iI][nN] {
-						    if (cur_state->blockdepth == -1)
-						        cur_state->blockdepth = 0;
-						    cur_state->blockdepth++;
-                            ECHO;
-                         }
-
-<xpb>[eE][nN][dD]         {
-                            cur_state->blockdepth--;
-                            ECHO;
-                            if (cur_state->blockdepth == 0)
-                            {
-                                BEGIN(INITIAL);
-                                return LEXRES_SEMI;
-                            }
-                         }
-
-<xpb>(.|{whitespace})        { ECHO; }
-
-<xpb><<EOF>>     { return LEXRES_EOL; }
-
 {xbstart}		{
 					BEGIN(xb);
 					ECHO;
@@ -505,7 +478,10 @@ other			.
 <xb>{quotestop}	|
 <xb>{quotefail} {
 					yyless(1);
-					BEGIN(INITIAL);
+					if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+					else
+						BEGIN(spb);
 					ECHO;
 				}
 <xh>{xhinside}	|
@@ -530,7 +506,10 @@ other			.
 <xh>{quotestop}	|
 <xh>{quotefail} {
 					yyless(1);
-					BEGIN(INITIAL);
+					if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+					else
+						BEGIN(spb);
 					ECHO;
 				}
 
@@ -557,16 +536,25 @@ other			.
 <xq,xe>{quotestop}	|
 <xq,xe>{quotefail} {
 					yyless(1);
-					BEGIN(INITIAL);
+					if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+					else
+						BEGIN(spb);
 					ECHO;
 				}
 <xus>{xusstop1} {
 					yyless(1);
-					BEGIN(INITIAL);
+					if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+					else
+						BEGIN(spb);
 					ECHO;
 				}
 <xus>{xusstop2} {
-					BEGIN(INITIAL);
+					if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+					else
+						BEGIN(spb);
 					ECHO;
 				}
 <xq,xe,xus>{xqdouble} {
@@ -616,7 +604,10 @@ other			.
 					{
 						free(cur_state->dolqstart);
 						cur_state->dolqstart = NULL;
-						BEGIN(INITIAL);
+						if (cur_state->blockdepth == 0)
+							BEGIN(INITIAL);
+						else
+							BEGIN(spb);
 					}
 					else
 					{
@@ -649,16 +640,25 @@ other			.
 					ECHO;
 				}
 <xd>{xdstop}	{
-					BEGIN(INITIAL);
+                    if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+                    else
+                        BEGIN(spb);
 					ECHO;
 				}
 <xui>{xuistop1}	{
 					yyless(1);
-					BEGIN(INITIAL);
+                    if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+                    else
+                        BEGIN(spb);
 					ECHO;
 				}
 <xui>{xuistop2}	{
-					BEGIN(INITIAL);
+                    if (cur_state->blockdepth == 0)
+						BEGIN(INITIAL);
+                    else
+                        BEGIN(spb);
 					ECHO;
 				}
 <xd,xui>{xddouble}	{
@@ -705,7 +705,8 @@ other			.
 
 ";"				{
 					ECHO;
-					if (cur_state->paren_depth == 0)
+					if (cur_state->paren_depth == 0 &&
+                        cur_state->blockdepth == 0)
 					{
 						/* Terminate lexing temporarily */
 						return LEXRES_SEMI;
@@ -886,15 +887,52 @@ other			.
 					ECHO;
 				}
 
+<spb>{identifier} {
+                            if (pg_strcasecmp(yytext, "begin") == 0)
+                            {
+                                if (cur_state->blockdepth == -1) /* First time */
+                                    cur_state->blockdepth = 0;
+                                (cur_state->blockdepth)++;
+                                ECHO;
+                            }
+                            else if (pg_strcasecmp(yytext, "end") == 0)
+                            {
+                                (cur_state->blockdepth)--;
+                                if (cur_state->blockdepth < 0)
+                                {
+                                    psql_error("END without a BEGIN");
+                                }
+                                ECHO;
+                                if (cur_state->blockdepth == 0)
+                                {
+                                    BEGIN(INITIAL);
+                                    return LEXRES_SEMI;
+                                }
+                            }
+                            else
+                                ECHO;
+                         }
+
+<spb><<EOF>>     { return LEXRES_EOL; }
 
 {identifier}	{
+                    if (pg_strcasecmp(yytext, "procedure") == 0 &&
+                        cur_state->prev_word &&
+                        (pg_strcasecmp(cur_state->prev_word, "create") == 0 ||
+                         pg_strcasecmp(cur_state->prev_word, "replace") == 0))
+                    {
+                        cur_state->blockdepth = -1;
+                        BEGIN(spb);                        
+                    }
+                    if (cur_state->prev_word)
+                        free(cur_state->prev_word);
+                    cur_state->prev_word = pg_strdup(yytext);
 					ECHO;
 				}
 
 {other}			{
 					ECHO;
 				}
-
 
 	/*
 	 * Everything from here down is psql-specific.
@@ -1367,7 +1405,7 @@ psql_scan(PsqlScanState state,
 					result = PSCAN_INCOMPLETE;
 					*prompt = PROMPT_SINGLEQUOTE;
 					break;
-                case xpb:
+                case spb:
                     result = PSCAN_INCOMPLETE;
                     *prompt = PROMPT_DOLLARQUOTE;
                     break;
@@ -1380,6 +1418,7 @@ psql_scan(PsqlScanState state,
 		case LEXRES_SEMI:		/* semicolon */
 			result = PSCAN_SEMICOLON;
 			*prompt = PROMPT_READY;
+            reset_stmt_state();
 			break;
 		case LEXRES_BACKSLASH:	/* backslash */
 			result = PSCAN_BACKSLASH;
@@ -1981,4 +2020,13 @@ escape_variable(bool as_ident)
 	 * original text into the output buffer.
 	 */
 	emit(yytext, yyleng);
+}
+
+/*
+ * Executed after a statement is terminated.
+ */
+static void
+reset_stmt_state(void)
+{
+    cur_state->prev_word = NULL;
 }
