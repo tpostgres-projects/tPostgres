@@ -503,6 +503,8 @@ sub CopyIncludeFiles
 
     CopyFiles('PL/pgSQL header', $target . '/include/server/','src/pl/plpgsql/src/', 'plpgsql.h');
 
+    CopyFiles('PL/TSQL header', $target . '/include/server/','src/pl/pltsql/src/', 'pltsql.h');
+
     # some xcopy progs don't like mixed slash style paths
     (my $ctarget = $target) =~ s!/!\\!g;
     while (my $d = readdir($D))
