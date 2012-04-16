@@ -900,7 +900,7 @@ other			.
                                 (cur_state->blockdepth)--;
                                 if (cur_state->blockdepth < 0)
                                 {
-                                    psql_error("END without a BEGIN");
+                                    psql_error("END without a corresponding BEGIN\n");
                                 }
                                 ECHO;
                                 if (cur_state->blockdepth == 0)
