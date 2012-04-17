@@ -2891,7 +2891,8 @@ ignore_opt_semicol(void)
 static bool
 word_matches(int tok, const char *pattern)
 {
-	return ((tok == T_WORD) && (strcasecmp(yylval.word.ident, pattern) == 0));
+	return ((tok == T_WORD) &&
+	        (pg_strcasecmp(yylval.word.ident, pattern) == 0));
 }
 
 static PLTSQL_type *
@@ -3051,7 +3052,7 @@ make_execsql_stmt(int firsttoken, int location, PLword *firstword)
 	 */
 	tok = firsttoken;
 	is_prev_tok_create =
-		(firstword && (strcasecmp(firstword->ident, "CREATE") == 0));
+		(firstword && (pg_strcasecmp(firstword->ident, "CREATE") == 0));
 	for (;;)
 	{
 		prev_tok = tok;
