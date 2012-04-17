@@ -6029,15 +6029,21 @@ CreateFunctionStmt:
 					StringInfoData      prosrc;
 					CreateFunctionStmt *n = makeNode(CreateFunctionStmt);
 
-					tok = base_yylex(&yylval, &yylloc, yyscanner);
+					tok      = base_yylex(&yylval, &yylloc, yyscanner);
+					startloc = yylloc;
 
-					if (tok != BEGIN_P)
-						ereport(ERROR,
-						        (errcode(ERRCODE_SYNTAX_ERROR),
-						         errmsg("BEGIN expected"),
-						         parser_errposition(yylloc)));
-
-					startloc   = yylloc;
+					/*
+					 * Gear up for blockdepth tracking.  We do not add the
+					 * overhead of checking for errors such as unexpected END_P
+					 * tokens before the first BEGIN_P token as the validator
+					 * is able to catch those.
+					 */
+					while (tok != BEGIN_P)
+					{
+						if (tok == 0)
+							parser_yyerror("Unexpected end of procedure");
+						tok = base_yylex(&yylval, &yylloc, yyscanner);
+					}
 					blockdepth = 1;
 
 					while (blockdepth != 0)
