@@ -51,7 +51,7 @@ endif
 scan.c: scan.l
 ifdef FLEX
 	$(FLEX) $(FLEXFLAGS) -o'$@' $<
-	# @if [ `wc -l <lex.backup` -eq 1 ]; then rm lex.backup; else echo "Scanner requires backup, see lex.backup."; exit 1; fi
+	@if [ `wc -l <lex.backup` -eq 1 ]; then rm lex.backup; else echo "Scanner requires backup, see lex.backup."; exit 1; fi
 else
 	@$(missing) flex $< $@
 endif

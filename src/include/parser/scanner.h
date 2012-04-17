@@ -20,6 +20,7 @@
 #define SCANNER_H
 
 #include "parser/keywords.h"
+#include "lib/stringinfo.h"
 
 /*
  * The scanner returns extra data about scanned tokens in this union type.
@@ -130,5 +131,8 @@ extern int core_yylex(core_YYSTYPE *lvalp, YYLTYPE *llocp,
 extern int	scanner_errposition(int location, core_yyscan_t yyscanner);
 extern void scanner_yyerror(const char *message, core_yyscan_t yyscanner);
 extern void begin_proc(core_yyscan_t yyscanner);
+extern void end_proc(core_yyscan_t yyscanner);
+extern void scanner_append_source_text(StringInfo buf, int startlocation,
+			int endlocation, core_yyscan_t yyscanner);
 
 #endif   /* SCANNER_H */

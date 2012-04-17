@@ -6021,39 +6021,67 @@ CreateFunctionStmt:
 					n->withClause = $7;
 					$$ = (Node *)n;
 				}
-			| create_or_replace_proc func_name func_args_with_defaults
-			  createfunc_opt_list opt_definition
+			| create_or_replace_proc func_name func_args_with_defaults AS
 				{
-					ListCell       *opt;
-					bool            withlang = false;
-
+					int                 tok;
+					int                 startloc;
+					int                 blockdepth;
+					StringInfoData      prosrc;
 					CreateFunctionStmt *n = makeNode(CreateFunctionStmt);
-					n->replace = $1;
-					n->funcname = $2;
-					n->parameters = $3;
-					/*
-					 * TODO: Should really be int.  Will need to look at
-					 * "control reached end of function without RETURN" in
-					 * PL/TSQL.
-					 */
-					n->returnType = makeTypeName("void");
-					n->options = $4;
-					foreach(opt, n->options)
-					{
-						DefElem *defel = (DefElem *) lfirst(opt);
 
-						if (strcmp(defel->defname, "language") == 0)
+					tok = base_yylex(&yylval, &yylloc, yyscanner);
+
+					if (tok != BEGIN_P)
+						ereport(ERROR,
+						        (errcode(ERRCODE_SYNTAX_ERROR),
+						         errmsg("BEGIN expected"),
+						         parser_errposition(yylloc)));
+
+					startloc   = yylloc;
+					blockdepth = 1;
+
+					while (blockdepth != 0)
+					{
+						tok = base_yylex(&yylval, &yylloc, yyscanner);
+
+						if (tok == 0)
 						{
-							withlang = true;
-							break;
+							parser_yyerror("Unexpected end of procedure");
+						}
+						else if (tok == BEGIN_P)
+						{
+							blockdepth++;
+						}
+						else if (tok == END_P)
+						{
+							blockdepth--;
+							if (blockdepth < 0)
+								ereport(ERROR,
+								        (errcode(ERRCODE_SYNTAX_ERROR),
+								         errmsg("END without a corresponding BEGIN"),
+								         parser_errposition(yylloc)));
 						}
 					}
 
-					/* TODO: Make the default language configurable. */
-					if (!withlang)
-						lappend(n->options, makeDefElem("language",
+					/* Signal the end of procedure */
+					end_proc_with_semicol(&yylval, &yylloc, yyscanner);
+
+					n->replace    = $1;
+					n->funcname   = $2;
+					n->parameters = $3;
+					n->returnType = makeTypeName("void");
+					n->options    = list_make1(makeDefElem("language",
 											(Node *)makeString("pltsql")));
-					n->withClause = $5;
+
+					/* Set the accumulated source as the procedure body. */
+					initStringInfo(&prosrc);
+					scanner_append_source_text(&prosrc, startloc,
+						 yylloc + yylen, /* include the last END token */
+						 yyscanner);
+					lappend(n->options, makeDefElem("as",
+						 (Node *)list_make1(makeString(prosrc.data))));
+
+					n->withClause = NIL;
 					$$ = (Node *)n;
 				}
 		;

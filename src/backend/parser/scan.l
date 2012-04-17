@@ -158,7 +158,6 @@ extern void core_yyset_column(int column_no, yyscan_t yyscanner);
 %x xui
 %x xus
 %x xeu
-%x xpb
 
 %s sp
 
@@ -413,35 +412,6 @@ other			.
 				}
 
 <xc><<EOF>>		{ yyerror("unterminated /* comment"); }
-
-<xpb>[eE][nN][dD]{whitespace}*([iI][fF]|[cC][aA][sS][eE]|[lL][oO][oO][pP]) {
-                    addlit(yytext, yyleng, yyscanner);
-                 }
-
-<xpb>[bB][eE][gG][iI][nN] {
-						    if (yyextra->blockdepth == -1)
-						        yyextra->blockdepth = 0;
-						    yyextra->blockdepth++;
-                            addlit(yytext, yyleng, yyscanner);
-                         }
-
-<xpb>[eE][nN][dD]         {
-                            yyextra->blockdepth--;
-                            if (yyextra->blockdepth < 0)
-                                yyerror("END without a corresponding BEGIN");
-                            addlit(yytext, yyleng, yyscanner);
-                            if (yyextra->blockdepth == 0)
-                            {
-                                BEGIN(INITIAL);
-                                yylval->str = litbufdup(yyscanner);
-                                yyextra->is_proc_active = false;
-                                return SCONST;
-                            }
-                         }
-
-<xpb>(.|{whitespace})        { addlit(yytext, yyleng, yyscanner); }
-
-<xpb><<EOF>>     { yyerror("unterminated procedure"); }
 
 {xbstart}		{
 					/* Binary bit type.
@@ -964,10 +934,6 @@ other			.
                             {
                                 Assert(yyextra->paren_state == SENT_CL_PAREN ||
                                        yyextra->paren_state == SEEN_PAREN);
-
-                                BEGIN(xpb); /* Exclusive state for CREATE [OR
-	                                        * REPLACE] PROCEDURE ... AS */
-                                startlit();
                             }
                         }
 						yylval->keyword = keyword->name;
@@ -975,16 +941,19 @@ other			.
 					}
 
 					/*
-					 * No.  Convert the identifier to lower case, and truncate
-					 * if necessary.
+					 * No.
+                     *
+                     * If this identifier represents a procedure name, prepare
+					 * for optional parens and at-prefixed parameter handling.
+                     *
+                     * Convert the identifier to lower case, and truncate if
+					 * necessary.
 					 */
-                    if (yyextra->is_proc_active)
+                    if (yyextra->is_proc_active &&
+                        yyextra->paren_state == UNINITIALIZED)
                     {
-                        if (yyextra->paren_state == UNINITIALIZED)
-                        {
-                            yyextra->paren_state = NO_PAREN;
-                            BEGIN(sp);
-                        }
+                        yyextra->paren_state = NO_PAREN;
+                        BEGIN(sp);
                     }
 
 					ident = downcase_truncate_identifier(yytext, yyleng, true);
@@ -1102,7 +1071,6 @@ scanner_init(const char *str,
 	yyext->num_keywords = num_keywords;
     yyext->is_proc_active = false;
     yyext->paren_state = UNINITIALIZED;
-    yyext->blockdepth = -1;
 
 	/*
 	 * Make a scan buffer with special termination needed by flex.
@@ -1521,4 +1489,20 @@ void
 begin_proc(core_yyscan_t yyscanner)
 {
     yyextra->is_proc_active = true;
+}
+
+void
+end_proc(core_yyscan_t yyscanner)
+{
+    yyextra->is_proc_active = false;
+    yyextra->paren_state = UNINITIALIZED;
+}
+
+void
+scanner_append_source_text(StringInfo buf, int startlocation,
+						   int endlocation, core_yyscan_t yyscanner)
+{
+	Assert(startlocation <= endlocation);
+	appendBinaryStringInfo(buf, yyextra->scanbuf + startlocation,
+						   endlocation - startlocation);
 }

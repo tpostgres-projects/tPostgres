@@ -162,3 +162,33 @@ base_yylex(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
 
 	return cur_token;
 }
+
+void
+end_proc_with_semicol(YYSTYPE *lvalp, YYLTYPE *llocp, core_yyscan_t yyscanner)
+{
+	base_yy_extra_type *yyextra = pg_yyget_extra(yyscanner);
+
+	/*
+	 * END_P does not result in a look-ahead token but let's be defensive.
+	 *
+	 * In the unlikely event, the worst-case scenario would be making the
+	 * semicolon mandatory.
+	 */
+	Assert(!yyextra->have_lookahead);
+	if (!yyextra->have_lookahead)
+	{
+		/*
+		 * We do not check if the next token is a semicolon because the
+		 * additional infrastructure that would require (to support multiple
+		 * lookahead tokens) is not justified given that the parser can handle
+		 * an empty statement just fine without significant overhead.
+		 */
+		yyextra->lookahead_token = ';';
+		yyextra->lookahead_yylval = lvalp->core_yystype;
+		yyextra->lookahead_yylloc = *llocp;
+		yyextra->have_lookahead = true;
+	}
+
+	/* Signal the end of procedure to the scanner. */
+	end_proc(yyscanner);
+}
