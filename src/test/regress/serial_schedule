@@ -115,6 +115,8 @@ test: json
 test: plancache
 test: limit
 test: plpgsql
+test: tpg_sample
+test: tpg_storedproc
 test: pltsql_print
 test: pltsql_if
 test: pltsql_at_prefixed_vars
