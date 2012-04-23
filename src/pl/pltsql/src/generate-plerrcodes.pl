@@ -1,8 +1,10 @@
 #!/usr/bin/perl
 #
 # Generate the plerrcodes.h header from errcodes.txt
+#
+# Portions Copyright (c) 2011-2012, TPOSTGRES.  All rights reserved.
+#
 # Copyright (c) 2000-2012, PostgreSQL Global Development Group
-# Copyright (c) 2011-2012 OpenSCG, Inc.  All rights reserved.
 
 use warnings;
 use strict;

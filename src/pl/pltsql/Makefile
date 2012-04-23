@@ -2,8 +2,9 @@
 #
 # Makefile for src/pl/pltsql (TSQL-compatible procedural language)
 #
+# Portions Copyright (c) 2011-2012, TPOSTGRES.  All rights reserved.
+#
 # Copyright (c) 1994, Regents of the University of California
-# Copyright (c) 2011-2012 OpenSCG, Inc.  All rights reserved.
 #
 # src/pl/pltsql/Makefile
 #

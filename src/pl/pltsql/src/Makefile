@@ -2,6 +2,10 @@
 #
 # Makefile for the pl/tsql procedural language
 #
+# Portions Copyright (c) 2011-2012, TPOSTGRES.  All rights reserved.
+#
+# Copyright (c) 1994, Regents of the University of California
+#
 # src/pl/pltsql/src/Makefile
 #
 #-------------------------------------------------------------------------

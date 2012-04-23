@@ -1,4 +1,7 @@
-/* src/pl/pltsql/src/pltsql--1.0.sql */
+/* src/pl/pltsql/src/pltsql--1.0.sql
+ *
+ * Copyright (c) 2011-2012, TPOSTGRES.  All rights reserved.
+ */
 
 /*
  * Cluster-wide objects are not tracked as EXTENSION members.  As pg_pltemplate
