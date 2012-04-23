@@ -6448,6 +6448,17 @@ RemoveFuncStmt:
 					n->concurrent = false;
 					$$ = (Node *)n;
 				}
+			| DROP PROCEDURE IF_P EXISTS func_name func_args opt_drop_behavior
+				{
+					DropStmt *n = makeNode(DropStmt);
+					n->removeType = OBJECT_FUNCTION;
+					n->objects = list_make1($5);
+					n->arguments = list_make1(extractArgTypes($6));
+					n->behavior = $7;
+					n->missing_ok = true;
+					n->concurrent = false;
+					$$ = (Node *)n;
+				}
 		;
 
 RemoveAggrStmt:
