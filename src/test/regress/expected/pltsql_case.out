@@ -1,0 +1,51 @@
+--
+-- PLTSQL -- CASE expression
+--
+CREATE FUNCTION case_in_assignment() RETURNS void AS $$
+DECLARE @a text,
+        @b int = 1,
+        @c text = 'one';
+BEGIN
+    SET @a = CASE @b WHEN 1 THEN @c ELSE 'other value' END
+    PRINT @a
+    SET @b = 3
+    SET @a = CASE @b WHEN 1 THEN @c ELSE 'other value' END
+    PRINT @a
+END
+$$ LANGUAGE pltsql;
+SELECT case_in_assignment();
+INFO:  one
+INFO:  other value
+ case_in_assignment 
+--------------------
+ 
+(1 row)
+
+CREATE PROCEDURE multiple_case_exprs_in_proc AS
+DECLARE @a text,
+        @b int = 1,
+        @c text = 'one';
+BEGIN
+    SET @a = CASE @b WHEN 1 THEN @c ELSE 'other value' END
+    PRINT @a
+    SET @b = 3
+    SET @a = CASE WHEN @b = 1 THEN @c ELSE 'other value' END
+    PRINT @a
+    SELECT CASE @b WHEN 1 THEN @c ELSE 'other value' END INTO @a;
+    PRINT @a
+    IF true
+        SET @a = CASE WHEN @b = 1 THEN @c ELSE 'NEW' END
+    ELSE
+        SET @a = 'NEWER'
+    PRINT @a
+END
+SELECT multiple_case_exprs_in_proc();
+INFO:  one
+INFO:  other value
+INFO:  other value
+INFO:  NEW
+ multiple_case_exprs_in_proc 
+-----------------------------
+ 
+(1 row)
+
