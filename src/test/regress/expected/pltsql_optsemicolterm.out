@@ -18,12 +18,12 @@ INFO:  68
 
 CREATE FUNCTION test_if_termination() RETURNS void AS $$
 BEGIN
-    IF true THEN
+    IF true
+        PRINT 'true';
+    IF true
+    BEGIN
         PRINT 'true'
-    END IF;
-    IF true THEN
-        PRINT 'true'
-    END IF
+    END
 END
 $$ LANGUAGE pltsql;
 SELECT test_if_termination();
@@ -58,48 +58,6 @@ $$ LANGUAGE pltsql;
 SELECT test_perform_termination();
  test_perform_termination 
 --------------------------
- 
-(1 row)
-
-CREATE FUNCTION test_case_termination() RETURNS void AS $$
-DECLARE @a int = 1
-BEGIN
-    CASE @a
-        WHEN 1, 2, 3 THEN
-            PRINT 'one or two or three'
-        ELSE
-            PRINT 'other value than one or two or three'
-    END CASE;
-
-    CASE @a
-        WHEN 1, 2, 3 THEN
-            PRINT 'one or two or three'
-        ELSE
-            PRINT 'other value than one or two or three'
-    END CASE
-
-    CASE
-        WHEN @a % 2 = 0 THEN
-            PRINT 'Even'
-        WHEN @a % 2 <> 0 THEN
-            PRINT 'Odd'
-    END CASE;
-
-    CASE
-        WHEN @a % 2 = 0 THEN
-            PRINT 'Even'
-        WHEN @a % 2 <> 0 THEN
-            PRINT 'Odd'
-    END CASE
-END
-$$ LANGUAGE pltsql;
-SELECT test_case_termination();
-INFO:  one or two or three
-INFO:  one or two or three
-INFO:  Odd
-INFO:  Odd
- test_case_termination 
------------------------
  
 (1 row)
 

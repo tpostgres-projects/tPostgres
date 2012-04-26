@@ -104,7 +104,7 @@ test: plancache limit plpgsql copy2 temp domain rangefuncs prepare without_oid c
 # ----------
 # Group of pltsql parallel tests
 # ----------
-test: tpg_sample tpg_storedproc pltsql_print pltsql_if pltsql_at_prefixed_vars pltsql_optsemicolterm pltsql_localtempobjs pltsql_plpgsqlsubset pltsql_sanitychecks
+test: tpg_sample tpg_storedproc pltsql_print pltsql_if pltsql_case pltsql_at_prefixed_vars pltsql_optsemicolterm pltsql_localtempobjs pltsql_plpgsqlsubset pltsql_sanitychecks
 
 # run stats by itself because its delay may be insufficient under heavy load
 test: stats

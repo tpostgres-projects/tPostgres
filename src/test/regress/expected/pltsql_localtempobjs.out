@@ -12,9 +12,8 @@ BEGIN
     WHERE   oid = (SELECT relnamespace FROM pg_class WHERE relname = '#test')
     AND     nspname LIKE 'pg_temp_%';
 
-    IF FOUND THEN
+    IF FOUND
         PRINT 'Local temporary table created.';
-    END IF;
 
     -- Perform some basic DML operations on the temporary table
     INSERT INTO #test VALUES (1);
@@ -43,9 +42,8 @@ BEGIN
     EXECUTE @stmt;      -- CREATE TABLE -> CREATE TEMPORARY TABLE transformation
     EXECUTE 'INSERT INTO #test2 VALUES (1, 2)'; -- Ident quoting in other contexts
 
-    IF EXISTS (SELECT b FROM #test2) THEN
+    IF EXISTS (SELECT b FROM #test2)
         PRINT 'Success'
-    END IF;
 
     EXECUTE 'SELECT a FROM #test2' INTO @val;
     PRINT @val;

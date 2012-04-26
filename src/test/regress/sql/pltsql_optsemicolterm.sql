@@ -15,12 +15,12 @@ SELECT test_declare_termination();
 
 CREATE FUNCTION test_if_termination() RETURNS void AS $$
 BEGIN
-    IF true THEN
+    IF true
+        PRINT 'true';
+    IF true
+    BEGIN
         PRINT 'true'
-    END IF;
-    IF true THEN
-        PRINT 'true'
-    END IF
+    END
 END
 $$ LANGUAGE pltsql;
 
@@ -45,41 +45,6 @@ END
 $$ LANGUAGE pltsql;
 
 SELECT test_perform_termination();
-
-CREATE FUNCTION test_case_termination() RETURNS void AS $$
-DECLARE @a int = 1
-BEGIN
-    CASE @a
-        WHEN 1, 2, 3 THEN
-            PRINT 'one or two or three'
-        ELSE
-            PRINT 'other value than one or two or three'
-    END CASE;
-
-    CASE @a
-        WHEN 1, 2, 3 THEN
-            PRINT 'one or two or three'
-        ELSE
-            PRINT 'other value than one or two or three'
-    END CASE
-
-    CASE
-        WHEN @a % 2 = 0 THEN
-            PRINT 'Even'
-        WHEN @a % 2 <> 0 THEN
-            PRINT 'Odd'
-    END CASE;
-
-    CASE
-        WHEN @a % 2 = 0 THEN
-            PRINT 'Even'
-        WHEN @a % 2 <> 0 THEN
-            PRINT 'Odd'
-    END CASE
-END
-$$ LANGUAGE pltsql;
-
-SELECT test_case_termination();
 
 CREATE FUNCTION test_getdiag_termination() RETURNS void AS $$
 DECLARE @perform_rowcount int

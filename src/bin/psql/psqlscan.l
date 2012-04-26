@@ -911,6 +911,15 @@ other			.
                                     return LEXRES_SEMI;
                                 }
                             }
+                            /*
+                             * While a CASE expression does not represent a block,
+                             * we treat it as one for simplicity.
+                             */
+                            else if (pg_strcasecmp(yytext, "case") == 0)
+                            {
+                                (cur_state->blockdepth)++;
+                                ECHO;
+                            }
                             else
                                 ECHO;
                          }

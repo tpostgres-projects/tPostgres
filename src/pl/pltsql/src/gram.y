@@ -104,7 +104,8 @@ static	PLTSQL_expr	*read_sql_expression2(int until, int until2,
 static PLTSQL_expr * read_sql_expression2_bos(int until, int until2,
 											  const char *expected,
 											  int *endtoken);
-static bool is_terminator(int tok, bool first);
+static bool is_terminator(int tok, bool first, int start_loc, int cur_loc,
+                          const char *sql_start, const List *tsql_idents);
 static bool word_matches(int tok, const char *pattern);
 static	PLTSQL_expr	*read_sql_stmt(const char *sqlstart);
 static	PLTSQL_expr	*read_sql_stmt_bos(const char *sqlstart);
@@ -117,8 +118,6 @@ static	void			 complete_direction(PLTSQL_stmt_fetch *fetch,
 static	PLTSQL_stmt	*make_return_stmt(int location);
 static	PLTSQL_stmt	*make_return_next_stmt(int location);
 static	PLTSQL_stmt	*make_return_query_stmt(int location);
-static  PLTSQL_stmt	*make_case(int location, PLTSQL_expr *t_expr,
-								   List *case_when_list, List *else_stmts);
 static	char			*NameOfDatum(PLwdatum *wdatum);
 static	void			 check_assignable(PLTSQL_datum *datum, int location);
 static	void			 read_into_target(PLTSQL_rec **rec, PLTSQL_row **row,
@@ -139,7 +138,6 @@ static	void			 check_labels(const char *start_label,
 static	PLTSQL_expr	*read_cursor_args(PLTSQL_var *cursor,
 										  int until, const char *expected);
 static	List			*read_raise_options(void);
-static	void			ignore_opt_semicol(void);
 
 %}
 
@@ -196,7 +194,6 @@ static	void			ignore_opt_semicol(void);
 		PLTSQL_nsitem			*nsitem;
 		PLTSQL_diag_item		*diagitem;
 		PLTSQL_stmt_fetch		*fetch;
-		PLTSQL_case_when		*casewhen;
 }
 
 %type <declhdr> decl_sect
@@ -210,34 +207,30 @@ static	void			ignore_opt_semicol(void);
 %type <nsitem>	decl_aliasitem
 
 %type <expr>	expr_until_semi expr_until_semi_or_bos expr_until_rightbracket
-%type <expr>	expr_until_then expr_until_loop opt_expr_until_when
+%type <expr>	expr_until_loop
 %type <expr>	opt_exitcond expr_until_bos
 
 %type <ival>	assign_var foreach_slice
 %type <var>		cursor_variable
 %type <datum>	decl_cursor_arg
 %type <forvariable>	for_variable
-%type <stmt>	for_control
+%type <stmt>	for_control stmt_foreach_a
 
 %type <str>		any_identifier opt_block_label opt_label
 
-%type <list>	proc_sect proc_stmts stmt_elsifs stmt_else
+%type <list>	proc_sect proc_stmts
 %type <loop_body>	loop_body
 %type <stmt>	proc_stmt pl_block
 %type <stmt>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit
 %type <stmt>	stmt_return stmt_raise stmt_execsql
 %type <stmt>	stmt_dynexecute stmt_for stmt_perform stmt_getdiag
 %type <stmt>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
-%type <stmt>	stmt_case stmt_foreach_a
 %type <stmt>	pltsql_only_stmt plpgsql_only_stmt common_stmt
 
 %type <list>	proc_exceptions
 %type <exception_block> exception_sect
 %type <exception>	proc_exception
 %type <condition>	proc_conditions proc_condition
-
-%type <casewhen>	case_when
-%type <list>	case_when_list opt_case_else
 
 %type <boolean>	getdiag_area_opt
 %type <list>	getdiag_list
@@ -423,21 +416,18 @@ pl_block		: decl_sect K_BEGIN proc_sect exception_sect K_END
 						new->body		= $3;
 						new->exceptions	= $4;
 
-						tok1 = yylex();
+						pltsql_peek2(&tok1, &tok2, NULL, NULL);
 
-						if (tok1 == T_WORD)
+						if (tok1 == IDENT && tok2 == ';')
 						{
+							tok1 = yylex();
 							label = yylval.word.ident;
-							tok2 = yylex();
-							if (tok2 == ';')
-								check_labels($1.label, label, yylloc);
-							else
-								pltsql_push_back_token(tok2);
+							check_labels($1.label, label, yylloc);
+							tok2 = yylex(); /* consume optional semicolon */
 						}
-						else
+						else if (tok1 == ';')
 						{
-							if (tok1 != ';')
-								pltsql_push_back_token(tok1);
+							tok1 = yylex(); /* consume optional semicolon */
 						}
 
 						pltsql_ns_pop();
@@ -863,8 +853,6 @@ common_stmt	    : pl_block
 						{ $$ = $1; }
 				| stmt_if
 						{ $$ = $1; }
-				| stmt_case
-						{ $$ = $1; }
 				| stmt_while
 						{ $$ = $1; }
 				| stmt_for
@@ -1103,21 +1091,7 @@ assign_var		: T_DATUM
 					}
 				;
 
-stmt_if			: K_IF expr_until_bos K_THEN proc_sect stmt_elsifs stmt_else K_END K_IF opt_semi
-					{
-						PLTSQL_stmt_if *new;
-
-						new = palloc0(sizeof(PLTSQL_stmt_if));
-						new->cmd_type	= PLTSQL_STMT_IF;
-						new->lineno		= pltsql_location_to_lineno(@1);
-						new->cond		= $2;
-						new->then_body	= $4;
-						new->elsif_list = $5;
-						new->else_body  = $6;
-
-						$$ = (PLTSQL_stmt *)new;
-					}
-				| K_IF expr_until_bos proc_stmt %prec LOWER_THAN_ELSE
+stmt_if			: K_IF expr_until_bos proc_stmt %prec LOWER_THAN_ELSE
 				{
 						PLTSQL_stmt_if *new;
 
@@ -1126,8 +1100,6 @@ stmt_if			: K_IF expr_until_bos K_THEN proc_sect stmt_elsifs stmt_else K_END K_I
 						new->lineno		= pltsql_location_to_lineno(@1);
 						new->cond		= $2;
 						new->then_body	= list_make1($3);
-
-						ignore_opt_semicol();
 
 						$$ = (PLTSQL_stmt *)new;
 				}
@@ -1142,98 +1114,8 @@ stmt_if			: K_IF expr_until_bos K_THEN proc_sect stmt_elsifs stmt_else K_END K_I
 						new->then_body	= list_make1($3);
 						new->else_body  = list_make1($5);
 
-						ignore_opt_semicol();
-
 						$$ = (PLTSQL_stmt *)new;
 				}
-				;
-
-stmt_elsifs		:
-					{
-						$$ = NIL;
-					}
-				| stmt_elsifs K_ELSIF expr_until_then proc_sect
-					{
-						PLTSQL_if_elsif *new;
-
-						new = palloc0(sizeof(PLTSQL_if_elsif));
-						new->lineno = pltsql_location_to_lineno(@2);
-						new->cond   = $3;
-						new->stmts  = $4;
-
-						$$ = lappend($1, new);
-					}
-				;
-
-stmt_else		:
-					{
-						$$ = NIL;
-					}
-				| K_ELSE proc_sect
-					{
-						$$ = $2;
-					}
-				;
-
-stmt_case		: K_CASE opt_expr_until_when case_when_list opt_case_else K_END K_CASE opt_semi
-					{
-						$$ = make_case(@1, $2, $3, $4);
-					}
-				;
-
-opt_expr_until_when	:
-					{
-						PLTSQL_expr *expr = NULL;
-						int	tok = yylex();
-
-						if (tok != K_WHEN)
-						{
-							pltsql_push_back_token(tok);
-							expr = read_sql_expression(K_WHEN, "WHEN");
-						}
-						pltsql_push_back_token(K_WHEN);
-						$$ = expr;
-					}
-				;
-
-case_when_list	: case_when_list case_when
-					{
-						$$ = lappend($1, $2);
-					}
-				| case_when
-					{
-						$$ = list_make1($1);
-					}
-				;
-
-case_when		: K_WHEN expr_until_then proc_sect
-					{
-						PLTSQL_case_when *new = palloc(sizeof(PLTSQL_case_when));
-
-						new->lineno	= pltsql_location_to_lineno(@1);
-						new->expr	= $2;
-						new->stmts	= $3;
-						$$ = new;
-					}
-				;
-
-opt_case_else	:
-					{
-						$$ = NIL;
-					}
-				| K_ELSE proc_sect
-					{
-						/*
-						 * proc_sect could return an empty list, but we
-						 * must distinguish that from not having ELSE at all.
-						 * Simplest fix is to return a list with one NULL
-						 * pointer, which make_case() must take care of.
-						 */
-						if ($2 != NIL)
-							$$ = $2;
-						else
-							$$ = list_make1(NULL);
-					}
 				;
 
 stmt_loop		: opt_block_label K_LOOP loop_body
@@ -2353,10 +2235,6 @@ expr_until_rightbracket :
 					{ $$ = read_sql_expression(']', "]"); }
 				;
 
-expr_until_then :
-					{ $$ = read_sql_expression(K_THEN, "THEN"); }
-				;
-
 expr_until_loop :
 					{ $$ = read_sql_expression(K_LOOP, "LOOP"); }
 				;
@@ -2676,7 +2554,11 @@ read_sql_construct_bos(int until,
 			break;
 		if (tok == until3 && parenlevel == 0)
 			break;
-		if (untilbostok && is_terminator(tok, (startlocation == yylloc)) && parenlevel == 0)
+		if (untilbostok &&
+		    is_terminator(tok,
+		                  (startlocation == yylloc),
+		                  startlocation, yylloc, sqlstart, tsql_idents) &&
+		    parenlevel == 0)
 		{
 			pltsql_push_back_token(tok);
 			break;
@@ -2835,18 +2717,20 @@ quote_tsql_identifiers(const StringInfo src, const List *tsql_idents)
  * "tok" must be the current token, since we also look at yylval.
  */
 static bool
-is_terminator(int tok, bool first)
+is_terminator(int tok, bool first, int start_loc, int cur_loc,
+			  const char *sql_start, const List *tsql_idents)
 {
+	StringInfoData	ds;
+	bool			validsql = true;
+	MemoryContext	oldcontext = CurrentMemoryContext;
+
 	switch (tok)
 	{
-		/* Ambiguous tokens not included: NULL, CASE (which will be removed) */
+		/* Ambiguous tokens not included: NULL */
 		case ';':
 		case K_BEGIN:
 		case K_CLOSE:
 		case K_DECLARE:
-		case K_ELSE:
-		case K_ELSIF:
-		case K_END:
 		case K_EXIT:
 		case K_FETCH:
 		case K_FOR:
@@ -2868,25 +2752,45 @@ is_terminator(int tok, bool first)
 		 * syntax, in particular, the PL/pgSQL syntax for their respective
 		 * statements.
 		 */
-		case K_THEN:
 		case K_LOOP:
 			return true;
+		/*
+		 * We work harder in the ambiguous cases and perform a basic syntax
+		 * analysis to guide us.
+		 */
+		case K_ELSE:			/* Ambiguous: CASE expr versus IF-ELSE stmt */
+		case K_END:				/* Ambiguous: CASE expr versus block END */
+
+			if (first)
+				yyerror("syntax error");
+			
+			initStringInfo(&ds);
+			
+			if (sql_start)
+				appendStringInfoString(&ds, sql_start);
+
+			pltsql_append_source_text(&ds, start_loc, cur_loc);
+
+			PG_TRY();
+			{
+				check_sql_expr(quote_tsql_identifiers(&ds, tsql_idents),
+				               start_loc,
+				               sql_start ? strlen(sql_start) : 0);
+			}
+			PG_CATCH();
+			{
+				MemoryContextSwitchTo(oldcontext);
+				FlushErrorState();
+				validsql = false;
+			}
+			PG_END_TRY();
+			return validsql;
 	}
 
 	/* List of words that are not tokens but mark the beginning of a statement. */
 	return word_matches(tok, "UPDATE") ||
 		   word_matches(tok, "DELETE") ||
 		   (!first && word_matches(tok, "SELECT"));
-}
-
-static void
-ignore_opt_semicol(void)
-{
-	int tok;
-
-	tok = yylex();
-	if (tok != ';')
-		pltsql_push_back_token(tok);
 }
 
 static bool
@@ -2988,7 +2892,8 @@ read_datatype(int tok)
 			parenlevel++;
 		else if (tok == ')')
 			parenlevel--;
-		if (is_terminator(tok, first) && parenlevel == 0)
+		if (is_terminator(tok, first, startlocation, yylloc, NULL, NIL) &&
+		    parenlevel == 0)
 			break;
 
 		tok = yylex();
@@ -4091,83 +3996,4 @@ read_raise_options(void)
 	}
 
 	return result;
-}
-
-/*
- * Fix up CASE statement
- */
-static PLTSQL_stmt *
-make_case(int location, PLTSQL_expr *t_expr,
-		  List *case_when_list, List *else_stmts)
-{
-	PLTSQL_stmt_case	*new;
-
-	new = palloc(sizeof(PLTSQL_stmt_case));
-	new->cmd_type = PLTSQL_STMT_CASE;
-	new->lineno = pltsql_location_to_lineno(location);
-	new->t_expr = t_expr;
-	new->t_varno = 0;
-	new->case_when_list = case_when_list;
-	new->have_else = (else_stmts != NIL);
-	/* Get rid of list-with-NULL hack */
-	if (list_length(else_stmts) == 1 && linitial(else_stmts) == NULL)
-		new->else_stmts = NIL;
-	else
-		new->else_stmts = else_stmts;
-
-	/*
-	 * When test expression is present, we create a var for it and then
-	 * convert all the WHEN expressions to "VAR IN (original_expression)".
-	 * This is a bit klugy, but okay since we haven't yet done more than
-	 * read the expressions as text.  (Note that previous parsing won't
-	 * have complained if the WHEN ... THEN expression contained multiple
-	 * comma-separated values.)
-	 */
-	if (t_expr)
-	{
-		char	varname[32];
-		PLTSQL_var *t_var;
-		ListCell *l;
-
-		/* use a name unlikely to collide with any user names */
-		snprintf(varname, sizeof(varname), "__Case__Variable_%d__",
-				 pltsql_nDatums);
-
-		/*
-		 * We don't yet know the result datatype of t_expr.  Build the
-		 * variable as if it were INT4; we'll fix this at runtime if needed.
-		 */
-		t_var = (PLTSQL_var *)
-			pltsql_build_variable(varname, new->lineno,
-								   pltsql_build_datatype(INT4OID,
-														  -1,
-														  InvalidOid),
-								   true);
-		new->t_varno = t_var->dno;
-
-		foreach(l, case_when_list)
-		{
-			PLTSQL_case_when *cwt = (PLTSQL_case_when *) lfirst(l);
-			PLTSQL_expr *expr = cwt->expr;
-			StringInfoData	ds;
-
-			/* copy expression query without SELECT keyword (expr->query + 7) */
-			Assert(strncmp(expr->query, "SELECT ", 7) == 0);
-
-			/* And do the string hacking */
-			initStringInfo(&ds);
-
-			appendStringInfo(&ds, "SELECT \"%s\" IN (%s)",
-							 varname, expr->query + 7);
-
-			pfree(expr->query);
-			expr->query = pstrdup(ds.data);
-			/* Adjust expr's namespace to include the case variable */
-			expr->ns = pltsql_ns_top();
-
-			pfree(ds.data);
-		}
-	}
-
-	return (PLTSQL_stmt *) new;
 }

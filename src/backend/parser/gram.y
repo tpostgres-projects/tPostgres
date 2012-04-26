@@ -6069,6 +6069,14 @@ CreateFunctionStmt:
 								         errmsg("END without a corresponding BEGIN"),
 								         parser_errposition(yylloc)));
 						}
+						/*
+						 * While a CASE expression does not represent a block,
+						 * we treat it as one for simplicity.
+						 */
+						else if (tok == CASE)
+						{
+							blockdepth++;
+						}
 					}
 
 					/* Signal the end of procedure */

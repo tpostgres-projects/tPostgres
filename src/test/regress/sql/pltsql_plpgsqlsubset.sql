@@ -131,9 +131,9 @@ create unique index PHone_name on PHone using btree (slotname bpchar_ops);
 -- ************************************************************
 create function tg_room_au() returns trigger as '
 begin
-    if new.roomno != old.roomno then
+    if new.roomno != old.roomno
         update WSlot set roomno = new.roomno where roomno = old.roomno;
-    end if;
+
     return new;
 end;
 ' language pltsql;
@@ -163,9 +163,9 @@ create trigger tg_room_ad after delete
 -- ************************************************************
 create function tg_wslot_biu() returns trigger as $$
 begin
-    if count(*) = 0 from Room where roomno = new.roomno then
+    if count(*) = 0 from Room where roomno = new.roomno
         raise exception 'Room % does not exist', new.roomno;
-    end if;
+
     return new;
 end;
 $$ language pltsql;
@@ -180,9 +180,10 @@ create trigger tg_wslot_biu before insert or update
 -- ************************************************************
 create function tg_pfield_au() returns trigger as '
 begin
-    if new.name != old.name then
+    if new.name != old.name
+    begin
         update PSlot set pfname = new.name where pfname = old.name;
-    end if;
+    end
     return new;
 end;
 ' language pltsql;
@@ -216,9 +217,9 @@ declare
     ps          alias for new;
 begin
     select into pfrec * from PField where name = ps.pfname;
-    if not found then
+    if not found
         raise exception $$Patchfield "%" does not exist$$, ps.pfname;
-    end if;
+
     return ps;
 end;
 $proc$ language pltsql;
@@ -233,9 +234,9 @@ create trigger tg_pslot_biu before insert or update
 -- ************************************************************
 create function tg_system_au() returns trigger as '
 begin
-    if new.name != old.name then
+    if new.name != old.name
         update IFace set sysname = new.name where sysname = old.name;
-    end if;
+
     return new;
 end;
 ' language pltsql;
@@ -254,15 +255,15 @@ declare
     sysrec	record;
 begin
     select into sysrec * from system where name = new.sysname;
-    if not found then
+    if not found
         raise exception $q$system "%" does not exist$q$, new.sysname;
-    end if;
+
     sname := 'IF.' || new.sysname;
     sname := sname || '.';
     sname := sname || new.ifname;
-    if length(sname) > 20 then
+    if length(sname) > 20
         raise exception 'IFace slotname "%" too long (20 char max)', sname;
-    end if;
+
     new.slotname := sname;
     return new;
 end;
@@ -281,21 +282,24 @@ declare
     hname	text;
     dummy	integer;
 begin
-    if tg_op = ''INSERT'' then
+    if tg_op = ''INSERT''
+    begin
 	dummy := tg_hub_adjustslots(new.name, 0, new.nslots);
 	return new;
-    end if;
-    if tg_op = ''UPDATE'' then
-	if new.name != old.name then
-	    update HSlot set hubname = new.name where hubname = old.name;
-	end if;
-	dummy := tg_hub_adjustslots(new.name, old.nslots, new.nslots);
-	return new;
-    end if;
-    if tg_op = ''DELETE'' then
+    end
+    if tg_op = ''UPDATE''
+    begin
+        if new.name != old.name
+            update HSlot set hubname = new.name where hubname = old.name;
+
+        dummy := tg_hub_adjustslots(new.name, old.nslots, new.nslots);
+        return new;
+    end;
+    if tg_op = ''DELETE''
+    begin
 	dummy := tg_hub_adjustslots(old.name, old.nslots, 0);
 	return old;
-    end if;
+    end
 end;
 ' language pltsql;
 
@@ -311,13 +315,14 @@ create function tg_hub_adjustslots(hname bpchar,
                                    newnslots integer)
 returns integer as '
 begin
-    if newnslots = oldnslots then
+    if newnslots = oldnslots
         return 0;
-    end if;
-    if newnslots < oldnslots then
+
+    if newnslots < oldnslots
+    begin
         delete from HSlot where hubname = hname and slotno > newnslots;
-	return 0;
-    end if;
+        return 0;
+    end;
     for i in oldnslots + 1 .. newnslots loop
         insert into HSlot (slotname, hubname, slotno, slotlink)
 		values (''HS.dummy'', hname, i, '''');
@@ -343,23 +348,22 @@ declare
     hubrec	record;
 begin
     select into hubrec * from Hub where name = new.hubname;
-    if not found then
+    if not found
         raise exception ''no manual manipulation of HSlot'';
-    end if;
-    if new.slotno < 1 or new.slotno > hubrec.nslots then
+
+    if new.slotno < 1 or new.slotno > hubrec.nslots
         raise exception ''no manual manipulation of HSlot'';
-    end if;
-    if tg_op = ''UPDATE'' and new.hubname != old.hubname then
-	if count(*) > 0 from Hub where name = old.hubname then
-	    raise exception ''no manual manipulation of HSlot'';
-	end if;
-    end if;
+
+    if tg_op = ''UPDATE'' and new.hubname != old.hubname
+    begin
+        if count(*) > 0 from Hub where name = old.hubname
+            raise exception ''no manual manipulation of HSlot'';
+    end;
     sname := ''HS.'' || trim(new.hubname);
     sname := sname || ''.'';
     sname := sname || new.slotno::text;
-    if length(sname) > 20 then
+    if length(sname) > 20
         raise exception ''HSlot slotname "%" too long (20 char max)'', sname;
-    end if;
     new.slotname := sname;
     return new;
 end;
@@ -378,12 +382,12 @@ declare
     hubrec	record;
 begin
     select into hubrec * from Hub where name = old.hubname;
-    if not found then
+    if not found
         return old;
-    end if;
-    if old.slotno > hubrec.nslots then
+
+    if old.slotno > hubrec.nslots
         return old;
-    end if;
+
     raise exception ''no manual manipulation of HSlot'';
 end;
 ' language pltsql;
@@ -398,9 +402,9 @@ create trigger tg_hslot_bd before delete
 -- ************************************************************
 create function tg_chkslotname() returns trigger as '
 begin
-    if substr(new.slotname, 1, 2) != tg_argv[0] then
+    if substr(new.slotname, 1, 2) != tg_argv[0]
         raise exception ''slotname must begin with %'', tg_argv[0];
-    end if;
+
     return new;
 end;
 ' language pltsql;
@@ -427,9 +431,9 @@ create trigger tg_chkslotname before insert
 -- ************************************************************
 create function tg_chkslotlink() returns trigger as '
 begin
-    if new.slotlink isnull then
-        new.slotlink := '''';
-    end if;
+    if new.slotlink isnull
+        set new.slotlink := '''';
+
     return new;
 end;
 ' language pltsql;
@@ -456,9 +460,9 @@ create trigger tg_chkslotlink before insert or update
 -- ************************************************************
 create function tg_chkbacklink() returns trigger as '
 begin
-    if new.backlink isnull then
-        new.backlink := '''';
-    end if;
+    if new.backlink isnull
+        set new.backlink := '''';
+
     return new;
 end;
 ' language pltsql;
@@ -479,7 +483,8 @@ create trigger tg_chkbacklink before insert or update
 -- ************************************************************
 create function tg_pslot_bu() returns trigger as '
 begin
-    if new.slotname != old.slotname then
+    if new.slotname != old.slotname
+    begin
         delete from PSlot where slotname = old.slotname;
 	insert into PSlot (
 		    slotname,
@@ -493,7 +498,7 @@ begin
 		    new.backlink
 		);
         return null;
-    end if;
+    end
     return new;
 end;
 ' language pltsql;
@@ -508,7 +513,8 @@ create trigger tg_pslot_bu before update
 -- ************************************************************
 create function tg_wslot_bu() returns trigger as '
 begin
-    if new.slotname != old.slotname then
+    if new.slotname != old.slotname
+    begin
         delete from WSlot where slotname = old.slotname;
 	insert into WSlot (
 		    slotname,
@@ -522,7 +528,7 @@ begin
 		    new.backlink
 		);
         return null;
-    end if;
+    end;
     return new;
 end;
 ' language pltsql;
@@ -537,7 +543,8 @@ create trigger tg_wslot_bu before update
 -- ************************************************************
 create function tg_pline_bu() returns trigger as '
 begin
-    if new.slotname != old.slotname then
+    if new.slotname != old.slotname
+    begin
         delete from PLine where slotname = old.slotname;
 	insert into PLine (
 		    slotname,
@@ -551,7 +558,7 @@ begin
 		    new.backlink
 		);
         return null;
-    end if;
+    end;
     return new;
 end;
 ' language pltsql;
@@ -566,7 +573,8 @@ create trigger tg_pline_bu before update
 -- ************************************************************
 create function tg_iface_bu() returns trigger as '
 begin
-    if new.slotname != old.slotname then
+    if new.slotname != old.slotname
+    begin
         delete from IFace where slotname = old.slotname;
 	insert into IFace (
 		    slotname,
@@ -580,7 +588,7 @@ begin
 		    new.slotlink
 		);
         return null;
-    end if;
+    end
     return new;
 end;
 ' language pltsql;
@@ -595,7 +603,8 @@ create trigger tg_iface_bu before update
 -- ************************************************************
 create function tg_hslot_bu() returns trigger as '
 begin
-    if new.slotname != old.slotname or new.hubname != old.hubname then
+    if new.slotname != old.slotname or new.hubname != old.hubname
+    begin
         delete from HSlot where slotname = old.slotname;
 	insert into HSlot (
 		    slotname,
@@ -609,7 +618,7 @@ begin
 		    new.slotlink
 		);
         return null;
-    end if;
+    end;
     return new;
 end;
 ' language pltsql;
@@ -624,7 +633,8 @@ create trigger tg_hslot_bu before update
 -- ************************************************************
 create function tg_phone_bu() returns trigger as '
 begin
-    if new.slotname != old.slotname then
+    if new.slotname != old.slotname
+    begin
         delete from PHone where slotname = old.slotname;
 	insert into PHone (
 		    slotname,
@@ -636,7 +646,7 @@ begin
 		    new.slotlink
 		);
         return null;
-    end if;
+    end;
     return new;
 end;
 ' language pltsql;
@@ -653,33 +663,32 @@ create function tg_backlink_a() returns trigger as '
 declare
     dummy	integer;
 begin
-    if tg_op = ''INSERT'' then
-        if new.backlink != '''' then
-	    dummy := tg_backlink_set(new.backlink, new.slotname);
-	end if;
-	return new;
-    end if;
-    if tg_op = ''UPDATE'' then
-        if new.backlink != old.backlink then
-	    if old.backlink != '''' then
-	        dummy := tg_backlink_unset(old.backlink, old.slotname);
-	    end if;
-	    if new.backlink != '''' then
-	        dummy := tg_backlink_set(new.backlink, new.slotname);
-	    end if;
-	else
-	    if new.slotname != old.slotname and new.backlink != '''' then
-	        dummy := tg_slotlink_set(new.backlink, new.slotname);
-	    end if;
-	end if;
-	return new;
-    end if;
-    if tg_op = ''DELETE'' then
-        if old.backlink != '''' then
-	    dummy := tg_backlink_unset(old.backlink, old.slotname);
-	end if;
-	return old;
-    end if;
+    if tg_op = ''INSERT''
+    begin
+        if new.backlink != ''''
+            set dummy := tg_backlink_set(new.backlink, new.slotname);
+        return new;
+    end;
+    if tg_op = ''UPDATE''
+    begin
+        if new.backlink != old.backlink
+            if old.backlink != ''''
+            begin
+                dummy := tg_backlink_unset(old.backlink, old.slotname);
+            end
+            if new.backlink != ''''
+                set dummy := tg_backlink_set(new.backlink, new.slotname);
+            else
+                if new.slotname != old.slotname and new.backlink != ''''
+                    set dummy := tg_slotlink_set(new.backlink, new.slotname);
+        return new;
+    end
+    if tg_op = ''DELETE''
+    begin
+        if old.backlink != ''''
+            set dummy := tg_backlink_unset(old.backlink, old.slotname);
+        return old;
+    end
 end;
 ' language pltsql;
 
@@ -707,44 +716,44 @@ declare
 begin
     mytype := substr(myname, 1, 2);
     link := mytype || substr(blname, 1, 2);
-    if link = ''PLPL'' then
+    if link = ''PLPL''
         raise exception
 		''backlink between two phone lines does not make sense'';
-    end if;
-    if link in (''PLWS'', ''WSPL'') then
+
+    if link in (''PLWS'', ''WSPL'')
         raise exception
 		''direct link of phone line to wall slot not permitted'';
-    end if;
-    if mytype = ''PS'' then
+
+    if mytype = ''PS''
+    begin
         select into rec * from PSlot where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.backlink != blname then
-	    update PSlot set backlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''WS'' then
+        if not found
+            raise exception ''% does not exist'', myname;
+
+        if rec.backlink != blname
+        begin
+            update PSlot set backlink = blname where slotname = myname;
+        end
+        return 0;
+    end
+    if mytype = ''WS''
+    begin
         select into rec * from WSlot where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.backlink != blname then
-	    update WSlot set backlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''PL'' then
+        if not found
+            raise exception ''% does not exist'', myname;
+        if rec.backlink != blname
+            update WSlot set backlink = blname where slotname = myname;
+        return 0;
+    end
+    if mytype = ''PL''
+    begin
         select into rec * from PLine where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.backlink != blname then
-	    update PLine set backlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
+        if not found
+            raise exception ''% does not exist'', myname;
+        if rec.backlink != blname
+            update PLine set backlink = blname where slotname = myname;
+        return 0;
+    end;
     raise exception ''illegal backlink beginning with %'', mytype;
 end;
 ' language pltsql;
@@ -763,36 +772,35 @@ declare
     rec		record;
 begin
     mytype := substr(myname, 1, 2);
-    if mytype = ''PS'' then
+    if mytype = ''PS''
+    begin
         select into rec * from PSlot where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.backlink = blname then
-	    update PSlot set backlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''WS'' then
+        if not found
+            return 0;
+        if rec.backlink = blname
+            update PSlot set backlink = '''' where slotname = myname;
+        return 0;
+    end;
+    if mytype = ''WS''
+    begin
         select into rec * from WSlot where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.backlink = blname then
-	    update WSlot set backlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''PL'' then
+        if not found
+            return 0;
+        if rec.backlink = blname
+            update WSlot set backlink = '''' where slotname = myname;
+        return 0;
+    end
+    if mytype = ''PL''
+    begin
         select into rec * from PLine where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.backlink = blname then
-	    update PLine set backlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
+        if not found
+            return 0;
+        if rec.backlink = blname
+        begin
+            update PLine set backlink = '''' where slotname = myname;
+        end
+        return 0;
+    end
 end
 ' language pltsql;
 
@@ -805,33 +813,32 @@ create function tg_slotlink_a() returns trigger as '
 declare
     dummy	integer;
 begin
-    if tg_op = ''INSERT'' then
-        if new.slotlink != '''' then
-	    dummy := tg_slotlink_set(new.slotlink, new.slotname);
-	end if;
-	return new;
-    end if;
-    if tg_op = ''UPDATE'' then
-        if new.slotlink != old.slotlink then
-	    if old.slotlink != '''' then
-	        dummy := tg_slotlink_unset(old.slotlink, old.slotname);
-	    end if;
-	    if new.slotlink != '''' then
-	        dummy := tg_slotlink_set(new.slotlink, new.slotname);
-	    end if;
+    if tg_op = ''INSERT''
+    begin
+        if new.slotlink != ''''
+            set dummy := tg_slotlink_set(new.slotlink, new.slotname);
+        return new;
+    end
+    if tg_op = ''UPDATE''
+    begin
+        if new.slotlink != old.slotlink
+            if old.slotlink != ''''
+                set dummy := tg_slotlink_unset(old.slotlink, old.slotname);
+	    if new.slotlink != ''''
+	        set dummy := tg_slotlink_set(new.slotlink, new.slotname);
+    end
 	else
-	    if new.slotname != old.slotname and new.slotlink != '''' then
-	        dummy := tg_slotlink_set(new.slotlink, new.slotname);
-	    end if;
-	end if;
-	return new;
-    end if;
-    if tg_op = ''DELETE'' then
-        if old.slotlink != '''' then
-	    dummy := tg_slotlink_unset(old.slotlink, old.slotname);
-	end if;
-	return old;
-    end if;
+    begin
+	    if new.slotname != old.slotname and new.slotlink != ''''
+	        set dummy := tg_slotlink_set(new.slotlink, new.slotname);
+    end;
+    return new;
+    if tg_op = ''DELETE''
+    begin
+        if old.slotlink != ''''
+            set dummy := tg_slotlink_unset(old.slotlink, old.slotname);
+        return old;
+    end;
 end;
 ' language pltsql;
 
@@ -867,72 +874,71 @@ declare
 begin
     mytype := substr(myname, 1, 2);
     link := mytype || substr(blname, 1, 2);
-    if link = ''PHPH'' then
+    if link = ''PHPH''
         raise exception
 		''slotlink between two phones does not make sense'';
-    end if;
-    if link in (''PHHS'', ''HSPH'') then
+    if link in (''PHHS'', ''HSPH'')
         raise exception
 		''link of phone to hub does not make sense'';
-    end if;
-    if link in (''PHIF'', ''IFPH'') then
+    if link in (''PHIF'', ''IFPH'')
         raise exception
 		''link of phone to hub does not make sense'';
-    end if;
-    if link in (''PSWS'', ''WSPS'') then
+    if link in (''PSWS'', ''WSPS'')
         raise exception
 		''slotlink from patchslot to wallslot not permitted'';
-    end if;
-    if mytype = ''PS'' then
+    if mytype = ''PS''
+    begin
         select into rec * from PSlot where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.slotlink != blname then
-	    update PSlot set slotlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''WS'' then
+        if not found
+            raise exception ''% does not exist'', myname;
+        if rec.slotlink != blname
+            update PSlot set slotlink = blname where slotname = myname;
+        return 0;
+    end;
+    if mytype = ''WS''
+    begin
         select into rec * from WSlot where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.slotlink != blname then
-	    update WSlot set slotlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''IF'' then
+        if not found
+            raise exception ''% does not exist'', myname;
+        if rec.slotlink != blname
+            update WSlot set slotlink = blname where slotname = myname;
+        return 0;
+    end
+    if mytype = ''IF''
+    begin
         select into rec * from IFace where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.slotlink != blname then
-	    update IFace set slotlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''HS'' then
+        if not found
+            raise exception ''% does not exist'', myname;
+        if rec.slotlink != blname
+            update IFace set slotlink = blname where slotname = myname;
+        return 0;
+    end
+    if mytype = ''HS''
+    begin
         select into rec * from HSlot where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.slotlink != blname then
-	    update HSlot set slotlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''PH'' then
+        if not found
+        begin
+            raise exception ''% does not exist'', myname;
+        end
+        if rec.slotlink != blname
+        begin
+            update HSlot set slotlink = blname where slotname = myname;
+        end
+        return 0;
+    end;
+    if mytype = ''PH''
+    begin
         select into rec * from PHone where slotname = myname;
-	if not found then
-	    raise exception ''% does not exist'', myname;
-	end if;
-	if rec.slotlink != blname then
-	    update PHone set slotlink = blname where slotname = myname;
-	end if;
-	return 0;
-    end if;
+        if not found
+        begin
+            raise exception ''% does not exist'', myname;
+        end;
+        if rec.slotlink != blname
+        begin
+            update PHone set slotlink = blname where slotname = myname;
+        end;
+        return 0;
+    end
     raise exception ''illegal slotlink beginning with %'', mytype;
 end;
 ' language pltsql;
@@ -951,56 +957,57 @@ declare
     rec		record;
 begin
     mytype := substr(myname, 1, 2);
-    if mytype = ''PS'' then
+    if mytype = ''PS''
+    begin
         select into rec * from PSlot where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.slotlink = blname then
-	    update PSlot set slotlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''WS'' then
+        if not found
+            return 0;
+        if rec.slotlink = blname
+            update PSlot set slotlink = '''' where slotname = myname;
+        return 0;
+    end;
+    if mytype = ''WS''
+    begin
         select into rec * from WSlot where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.slotlink = blname then
-	    update WSlot set slotlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''IF'' then
+        if not found
+        begin
+            return 0;
+        end
+        if rec.slotlink = blname
+            update WSlot set slotlink = '''' where slotname = myname;
+        return 0;
+    end;
+    if mytype = ''IF''
+    begin
         select into rec * from IFace where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.slotlink = blname then
-	    update IFace set slotlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''HS'' then
+        if not found
+            return 0;
+        if rec.slotlink = blname
+            update IFace set slotlink = '''' where slotname = myname;
+        return 0;
+    end
+    if mytype = ''HS''
+    begin
         select into rec * from HSlot where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.slotlink = blname then
-	    update HSlot set slotlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
-    if mytype = ''PH'' then
+        if not found
+        begin
+            return 0;
+        end;
+        if rec.slotlink = blname
+            update HSlot set slotlink = '''' where slotname = myname;
+        return 0;
+    end
+    if mytype = ''PH''
+    begin
         select into rec * from PHone where slotname = myname;
-	if not found then
-	    return 0;
-	end if;
-	if rec.slotlink = blname then
-	    update PHone set slotlink = '''' where slotname = myname;
-	end if;
-	return 0;
-    end if;
+        if not found
+        begin
+            return 0;
+        end;
+        if rec.slotlink = blname
+            update PHone set slotlink = '''' where slotname = myname;
+        return 0;
+    end
 end;
 ' language pltsql;
 
@@ -1017,34 +1024,33 @@ declare
     retval	text;
 begin
     select into rec * from PSlot where slotname = $1;
-    if not found then
+    if not found
         return '''';
-    end if;
-    if rec.backlink = '''' then
+    if rec.backlink = ''''
         return ''-'';
-    end if;
     bltype := substr(rec.backlink, 1, 2);
-    if bltype = ''PL'' then
+    if bltype = ''PL''
         declare
 	    rec		record;
 	begin
 	    select into rec * from PLine where slotname = "outer".rec.backlink;
 	    retval := ''Phone line '' || trim(rec.phonenumber);
-	    if rec.comment != '''' then
+	    if rec.comment != ''''
+        begin
 	        retval := retval || '' ('';
-		retval := retval || rec.comment;
-		retval := retval || '')'';
-	    end if;
+            retval := retval || rec.comment;
+            retval := retval || '')'';
+	    end
 	    return retval;
-	end;
-    end if;
-    if bltype = ''WS'' then
+	end
+    if bltype = ''WS''
+    begin
         select into rec * from WSlot where slotname = rec.backlink;
-	retval := trim(rec.slotname) || '' in room '';
-	retval := retval || trim(rec.roomno);
-	retval := retval || '' -> '';
-	return retval || wslot_slotlink_view(rec.slotname);
-    end if;
+        retval := trim(rec.slotname) || '' in room '';
+        retval := retval || trim(rec.roomno);
+        retval := retval || '' -> '';
+        return retval || wslot_slotlink_view(rec.slotname);
+    end;
     return rec.backlink;
 end;
 ' language pltsql;
@@ -1061,26 +1067,26 @@ declare
     retval	text;
 begin
     select into psrec * from PSlot where slotname = $1;
-    if not found then
+    if not found
         return '''';
-    end if;
-    if psrec.slotlink = '''' then
+    if psrec.slotlink = ''''
         return ''-'';
-    end if;
     sltype := substr(psrec.slotlink, 1, 2);
-    if sltype = ''PS'' then
-	retval := trim(psrec.slotlink) || '' -> '';
-	return retval || pslot_backlink_view(psrec.slotlink);
-    end if;
-    if sltype = ''HS'' then
+    if sltype = ''PS''
+    begin
+        retval := trim(psrec.slotlink) || '' -> '';
+        return retval || pslot_backlink_view(psrec.slotlink);
+    end
+    if sltype = ''HS''
+    begin
         retval := comment from Hub H, HSlot HS
 			where HS.slotname = psrec.slotlink
 			  and H.name = HS.hubname;
         retval := retval || '' slot '';
-	retval := retval || slotno::text from HSlot
-			where slotname = psrec.slotlink;
-	return retval;
-    end if;
+        retval := retval || slotno::text from HSlot
+                where slotname = psrec.slotlink;
+        return retval;
+    end
     return psrec.slotlink;
 end;
 ' language pltsql;
@@ -1097,24 +1103,24 @@ declare
     retval	text;
 begin
     select into rec * from WSlot where slotname = $1;
-    if not found then
+    if not found
         return '''';
-    end if;
-    if rec.slotlink = '''' then
+    if rec.slotlink = ''''
         return ''-'';
-    end if;
     sltype := substr(rec.slotlink, 1, 2);
-    if sltype = ''PH'' then
+    if sltype = ''PH''
+    begin
         select into rec * from PHone where slotname = rec.slotlink;
-	retval := ''Phone '' || trim(rec.slotname);
-	if rec.comment != '''' then
-	    retval := retval || '' ('';
-	    retval := retval || rec.comment;
-	    retval := retval || '')'';
-	end if;
-	return retval;
-    end if;
-    if sltype = ''IF'' then
+        retval := ''Phone '' || trim(rec.slotname);
+        if rec.comment != ''''
+        begin
+            retval := retval || '' ('';
+            retval := retval || rec.comment;
+            retval := retval || '')'';
+        end
+        return retval;
+    end;
+    if sltype = ''IF''
 	declare
 	    syrow	System%RowType;
 	    ifrow	IFace%ROWTYPE;
@@ -1123,14 +1129,14 @@ begin
 	    select into syrow * from System where name = ifrow.sysname;
 	    retval := syrow.name || '' IF '';
 	    retval := retval || ifrow.ifname;
-	    if syrow.comment != '''' then
+	    if syrow.comment != ''''
+        begin
 	        retval := retval || '' ('';
-		retval := retval || syrow.comment;
-		retval := retval || '')'';
-	    end if;
+            retval := retval || syrow.comment;
+            retval := retval || '')'';
+	    end
 	    return retval;
-	end;
-    end if;
+	end
     return rec.slotlink;
 end;
 ' language pltsql;
@@ -1431,11 +1437,10 @@ insert into IFace values ('IF', 'orion', 'ethernet_interface_name_too_long', '')
 CREATE FUNCTION recursion_test(int,int) RETURNS text AS '
 DECLARE rslt text;
 BEGIN
-    IF $1 <= 0 THEN
-        rslt = CAST($2 AS TEXT);
+    IF $1 <= 0
+        SET rslt = CAST($2 AS TEXT);
     ELSE
-        rslt = CAST($1 AS TEXT) || '','' || recursion_test($1 - 1, $2);
-    END IF;
+        SET rslt = CAST($1 AS TEXT) || '','' || recursion_test($1 - 1, $2);
     RETURN rslt;
 END;' LANGUAGE pltsql;
 
@@ -1451,34 +1456,33 @@ create function test_found()
   declare
   begin
   insert into found_test_tbl values (1);
-  if FOUND then
+  if FOUND
      insert into found_test_tbl values (2);
-  end if;
 
   update found_test_tbl set a = 100 where a = 1;
-  if FOUND then
+  if FOUND
+  begin
     insert into found_test_tbl values (3);
-  end if;
+  end
 
   delete from found_test_tbl where a = 9999; -- matches no rows
-  if not FOUND then
+  if not FOUND
+  begin
     insert into found_test_tbl values (4);
-  end if;
+  end;
 
   for i in 1 .. 10 loop
     -- no need to do anything
   end loop;
-  if FOUND then
+  if FOUND
     insert into found_test_tbl values (5);
-  end if;
 
   -- never executes the loop
   for i in 2 .. 1 loop
     -- no need to do anything
   end loop;
-  if not FOUND then
+  if not FOUND
     insert into found_test_tbl values (6);
-  end if;
   return true;
   end;' language pltsql;
 
@@ -1529,15 +1533,18 @@ create function test_ret_set_rec_dyn(int) returns setof record as '
 DECLARE
 	retval RECORD;
 BEGIN
-	IF $1 > 10 THEN
-		SELECT INTO retval 5, 10, 15;
-		RETURN NEXT retval;
-		RETURN NEXT retval;
+	IF $1 > 10
+        BEGIN
+            SELECT INTO retval 5, 10, 15;
+            RETURN NEXT retval;
+            RETURN NEXT retval;
+        END
 	ELSE
-		SELECT INTO retval 50, 5::numeric, ''xxx''::text;
-		RETURN NEXT retval;
-		RETURN NEXT retval;
-	END IF;
+        BEGIN
+            SELECT INTO retval 50, 5::numeric, ''xxx''::text;
+            RETURN NEXT retval;
+            RETURN NEXT retval;
+        END
 	RETURN;
 END;' language pltsql;
 
@@ -1548,13 +1555,16 @@ create function test_ret_rec_dyn(int) returns record as '
 DECLARE
 	retval RECORD;
 BEGIN
-	IF $1 > 10 THEN
-		SELECT INTO retval 5, 10, 15;
-		RETURN retval;
+	IF $1 > 10
+        BEGIN
+            SELECT INTO retval 5, 10, 15;
+            RETURN retval;
+        END
 	ELSE
-		SELECT INTO retval 50, 5::numeric, ''xxx''::text;
-		RETURN retval;
-	END IF;
+        BEGIN
+            SELECT INTO retval 50, 5::numeric, ''xxx''::text;
+            RETURN retval;
+        END;
 END;' language pltsql;
 
 SELECT * FROM test_ret_rec_dyn(1500) AS (a int, b int, c int);
@@ -1652,31 +1662,29 @@ create table perform_test (
 
 create function simple_func(int) returns boolean as '
 BEGIN
-	IF $1 < 20 THEN
-		INSERT INTO perform_test VALUES ($1, $1 + 10);
-		RETURN TRUE;
+	IF $1 < 20
+        BEGIN
+            INSERT INTO perform_test VALUES ($1, $1 + 10);
+            RETURN TRUE;
+        END
 	ELSE
 		RETURN FALSE;
-	END IF;
 END;' language pltsql;
 
 create function perform_test_func() returns void as '
 BEGIN
-	IF FOUND then
+	IF FOUND
 		INSERT INTO perform_test VALUES (100, 100);
-	END IF;
 
 	PERFORM simple_func(5);
 
-	IF FOUND then
+	IF FOUND
 		INSERT INTO perform_test VALUES (100, 100);
-	END IF;
 
 	PERFORM simple_func(50);
 
-	IF FOUND then
+	IF FOUND
 		INSERT INTO perform_test VALUES (100, 100);
-	END IF;
 
 	RETURN;
 END;' language pltsql;
@@ -1700,9 +1708,8 @@ begin
 		raise notice 'should see this only if % <> 0', $1;
 		sx := $1;
 		raise notice 'should see this only if % fits in smallint', $1;
-		if $1 < 0 then
+		if $1 < 0
 			raise exception '% is less than zero', $1;
-		end if;
 	exception
 		when division_by_zero then
 			raise notice 'caught division_by_zero';
@@ -1858,7 +1865,7 @@ create function sp_id_user(a_login text) returns int as $$
 declare x int;
 begin
   select into x id from users where login = a_login;
-  if found then return x; end if;
+  if found return x;
   return 0;
 end$$ language pltsql stable;
 
@@ -1871,14 +1878,12 @@ create function sp_add_user(a_login text) returns int as $$
 declare my_id_user int;
 begin
   my_id_user = sp_id_user( a_login );
-  IF  my_id_user > 0 THEN
+  IF  my_id_user > 0
     RETURN -1;  -- error code for existing user
-  END IF;
   INSERT INTO users ( login ) VALUES ( a_login );
   my_id_user = sp_id_user( a_login );
-  IF  my_id_user = 0 THEN
+  IF  my_id_user = 0
     RETURN -2;  -- error code for insertion failure
-  END IF;
   RETURN my_id_user;
 end$$ language pltsql;
 
@@ -1936,11 +1941,10 @@ begin
     open c1($1, $2);
     fetch c1 into nonsense;
     close c1;
-    if found then
+    if found
         return true;
     else
         return false;
-    end if;
 end
 $$ language pltsql;
 
@@ -1958,11 +1962,10 @@ begin
     open c1(param12 := $2, param1 := $1);
     fetch c1 into nonsense;
     close c1;
-    if found then
+    if found
         return true;
     else
         return false;
-    end if;
 end
 $$ language pltsql;
 
@@ -1978,11 +1981,10 @@ begin
     open c1(param1 := $1, $2);
     fetch c1 into nonsense;
     close c1;
-    if found then
+    if found
         return true;
     else
         return false;
-    end if;
 end
 $$ language pltsql;
 select namedparmcursor_test2(20, 20);
@@ -2685,13 +2687,11 @@ begin
   open c;
   loop
       move relative 2 in c;
-      if not found then
+      if not found
           exit;
-      end if;
       fetch next from c into x;
-      if found then
+      if found
           return next x;
-      end if;
   end loop;
   close c;
 end;
@@ -2707,9 +2707,8 @@ begin
   open c;
   move forward all in c;
   fetch backward from c into x;
-  if found then
+  if found
     return next x;
-  end if;
   close c;
 end;
 $$ language pltsql;
@@ -3240,7 +3239,7 @@ returns numeric as $$
 declare aux numeric = $1[array_lower($1,1)];
 begin
   for i in array_lower($1,1)+1..array_upper($1,1) loop
-    if $1[i] < aux then aux := $1[i]; end if;
+    if $1[i] < aux set aux := $1[i];
   end loop;
   return aux;
 end;
@@ -3330,9 +3329,8 @@ $$ LANGUAGE pltsql;
 CREATE FUNCTION leaker_2(fail BOOL, OUT error_code INTEGER, OUT new_id INTEGER)
   RETURNS RECORD AS $$
 BEGIN
-  IF fail THEN
+  IF fail
     RAISE EXCEPTION 'fail ...';
-  END IF;
   error_code := 1;
   new_id := 1;
   RETURN;
@@ -3394,11 +3392,10 @@ DROP FUNCTION nonsimple_expr_test();
 create function recurse(float8) returns float8 as
 $$
 begin
-  if ($1 > 0) then
+  if ($1 > 0)
     return sql_recurse($1 - 1);
   else
     return $1;
-  end if;
 end;
 $$ language pltsql;
 
