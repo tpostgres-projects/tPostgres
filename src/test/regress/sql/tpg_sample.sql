@@ -75,17 +75,18 @@ END
 SELECT TSQL101();
 
 -- Demonstrates CURSOR DECLARation and use.
-CREATE PROCEDURE PrintLastTableName AS
+CREATE PROCEDURE PrintSQLFTableName AS
 
 DECLARE @TableName VARCHAR(50);
 
 DECLARE #c CURSOR FOR
   SELECT   table_name
   FROM     information_schema.tables
-  ORDER BY table_name DESC;
+  WHERE    table_schema = 'information_schema'
+    AND    table_name LIKE 'sql_f%';
 
 BEGIN
-  PRINT 'Last Table Name:';
+  PRINT 'SQL Features Table Name:';
 
   OPEN #c;
   FETCH NEXT FROM #c INTO @TableName;
@@ -94,7 +95,7 @@ BEGIN
   CLOSE #c;
 END
 
-SELECT PrintLastTableName();
+SELECT PrintSQLFTableName();
 
 -- Multiple comma-separated at-prefixed variable DECLARations, assignments, and
 -- the IF statement with an ELSE branch.

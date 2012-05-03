@@ -86,17 +86,18 @@ INFO:  Enterprise tPostgres is a No Brainer.
 (1 row)
 
 -- Demonstrates CURSOR DECLARation and use.
-CREATE PROCEDURE PrintLastTableName AS
+CREATE PROCEDURE PrintSQLFTableName AS
 
 DECLARE @TableName VARCHAR(50);
 
 DECLARE #c CURSOR FOR
   SELECT   table_name
   FROM     information_schema.tables
-  ORDER BY table_name DESC;
+  WHERE    table_schema = 'information_schema'
+    AND    table_name LIKE 'sql_f%';
 
 BEGIN
-  PRINT 'Last Table Name:';
+  PRINT 'SQL Features Table Name:';
 
   OPEN #c;
   FETCH NEXT FROM #c INTO @TableName;
@@ -104,10 +105,10 @@ BEGIN
 
   CLOSE #c;
 END
-SELECT PrintLastTableName();
-INFO:  Last Table Name:
-INFO:  xmlview5
- printlasttablename 
+SELECT PrintSQLFTableName();
+INFO:  SQL Features Table Name:
+INFO:  sql_features
+ printsqlftablename 
 --------------------
  
 (1 row)
