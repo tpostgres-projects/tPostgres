@@ -99,6 +99,10 @@ sub mkvcbuild
     $plpgsql->AddFiles('src\pl\plpgsql\src', 'gram.y');
     $plpgsql->AddReference($postgres);
 
+    my $pltsql = $solution->AddProject('pltsql','dll','PLs','src\pl\pltsql\src');
+    $pltsql->AddFiles('src\pl\pltsql\src', 'gram.y');
+    $pltsql->AddReference($postgres);
+
     if ($solution->{options}->{perl})
     {
         my $plperlsrc = "src\\pl\\plperl\\";

@@ -87,10 +87,11 @@ exit 0;
 
 sub installcheck
 {
+    my @opts = fetchRegressOpts();
     my @args = (
         "../../../$Config/pg_regress/pg_regress","--dlpath=.",
         "--psqldir=../../../$Config/psql","--schedule=${schedule}_schedule",
-        "--encoding=SQL_ASCII","--no-locale"
+        "--encoding=SQL_ASCII","--no-locale",@opts
     );
     push(@args,$maxconn) if $maxconn;
     system(@args);
@@ -100,11 +101,12 @@ sub installcheck
 
 sub check
 {
+    my @opts = fetchRegressOpts();
     my @args = (
         "../../../$Config/pg_regress/pg_regress","--dlpath=.",
         "--psqldir=../../../$Config/psql","--schedule=${schedule}_schedule",
         "--encoding=SQL_ASCII","--no-locale",
-        "--temp-install=./tmp_check","--top-builddir=\"$topdir\""
+        "--temp-install=./tmp_check","--top-builddir=\"$topdir\"",@opts
     );
     push(@args,$maxconn) if $maxconn;
     push(@args,$temp_config) if $temp_config;

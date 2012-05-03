@@ -164,6 +164,7 @@ EOF
             if ($grammarFile =~ /\.y$/)
             {
                 $outputFile =~ s{^src\\pl\\plpgsql\\src\\gram.c$}{src\\pl\\plpgsql\\src\\pl_gram.c};
+                $outputFile =~ s{^src\\pl\\pltsql\\src\\gram.c$}{src\\pl\\pltsql\\src\\pl_gram.c};
                 print $f <<EOF;
     <CustomBuild Include="$grammarFile">
       <Message Condition="'\$(Configuration)|\$(Platform)'=='Debug|$self->{platform}'">Running bison on $grammarFile</Message>

@@ -113,6 +113,7 @@ sub Install
 
     my $pl_extension_files = [];
     my @pldirs = ('src/pl/plpgsql/src');
+    push @pldirs, "src/pl/pltsql/src";
     push @pldirs,"src/pl/plperl" if $config->{perl};
     push @pldirs,"src/pl/plpython" if $config->{python};
     push @pldirs,"src/pl/tcl" if $config->{tcl};

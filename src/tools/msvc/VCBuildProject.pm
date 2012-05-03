@@ -85,6 +85,7 @@ EOF
             my $of = $fileNameWithPath;
             $of =~ s/\.y$/.c/;
             $of =~ s{^src\\pl\\plpgsql\\src\\gram.c$}{src\\pl\\plpgsql\\src\\pl_gram.c};
+            $of =~ s{^src\\pl\\pltsql\\src\\gram.c$}{src\\pl\\pltsql\\src\\pl_gram.c};
             print $f '>'
               . $self->GenerateCustomTool('Running bison on ' . $fileNameWithPath,
                 "perl src\\tools\\msvc\\pgbison.pl $fileNameWithPath", $of)

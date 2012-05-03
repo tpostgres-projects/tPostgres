@@ -285,6 +285,9 @@ s{PG_VERSION_STR "[^"]+"}{__STRINGIFY(x) #x\n#define __STRINGIFY2(z) __STRINGIFY
         system(
 'perl src\pl\plpgsql\src\generate-plerrcodes.pl src\backend\utils\errcodes.txt > src\pl\plpgsql\src\plerrcodes.h'
         );
+        system(
+'perl src\pl\pltsql\src\generate-plerrcodes.pl src\backend\utils\errcodes.txt > src\pl\pltsql\src\plerrcodes.h'
+        );
     }
 
     if (IsNewer('src\backend\utils\sort\qsort_tuple.c','src\backend\utils\sort\gen_qsort_tuple.pl'))
