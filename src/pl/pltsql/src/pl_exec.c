@@ -2473,6 +2473,7 @@ exec_stmt_return_next(PLTSQL_execstate *estate,
 					{
 						tuple = do_convert_tuple(tuple, tupmap);
 						free_conversion_map(tupmap);
+						free_tuple = true;
 					}
 				}
 				break;
