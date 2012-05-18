@@ -206,6 +206,7 @@ static void setup_privileges(void);
 static void set_info_version(void);
 static void setup_schema(void);
 static void load_plpgsql(void);
+static void load_pltsql(void);
 static void vacuum_db(void);
 static void make_template0(void);
 static void make_postgres(void);
@@ -1979,6 +1980,31 @@ load_plpgsql(void)
 }
 
 /*
+ * load PL/TSQL server-side language
+ */
+static void
+load_pltsql(void)
+{
+	PG_CMD_DECL;
+
+	fputs(_("loading PL/TSQL server-side language ... "), stdout);
+	fflush(stdout);
+
+	snprintf(cmd, sizeof(cmd),
+			 "\"%s\" %s template1 >%s",
+			 backend_exec, backend_options,
+			 DEVNULL);
+
+	PG_CMD_OPEN;
+
+	PG_CMD_PUTS("CREATE EXTENSION pltsql;\n");
+
+	PG_CMD_CLOSE;
+
+	check_ok();
+}
+
+/*
  * clean everything up in template1
  */
 static void
@@ -3297,6 +3323,8 @@ main(int argc, char *argv[])
 	setup_schema();
 
 	load_plpgsql();
+
+	load_pltsql();
 
 	vacuum_db();
 
