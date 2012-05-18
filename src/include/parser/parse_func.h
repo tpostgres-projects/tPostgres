@@ -77,6 +77,7 @@ extern const char *func_signature_string(List *funcname, int nargs,
 
 extern Oid LookupFuncName(List *funcname, int nargs, const Oid *argtypes,
 			   bool noError);
+extern Oid LookupUnambiguousFuncName(List *funcname, bool noError);
 extern Oid LookupFuncNameTypeNames(List *funcname, List *argtypes,
 						bool noError);
 extern Oid LookupAggNameTypeNames(List *aggname, List *argtypes,

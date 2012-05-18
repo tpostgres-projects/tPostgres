@@ -6436,15 +6436,16 @@ RemoveFuncStmt:
 					n->concurrent = false;
 					$$ = (Node *)n;
 				}
-			| DROP PROCEDURE func_name func_args opt_drop_behavior
+			| DROP PROCEDURE type_function_name opt_drop_behavior
 				{
 					DropStmt *n = makeNode(DropStmt);
 					n->removeType = OBJECT_FUNCTION;
-					n->objects = list_make1($3);
-					n->arguments = list_make1(extractArgTypes($4));
-					n->behavior = $5;
+					n->objects = list_make1(list_make1(makeString($3)));
+					n->arguments = NIL;
+					n->behavior = $4;
 					n->missing_ok = false;
 					n->concurrent = false;
+					n->flavor = TPG;
 					$$ = (Node *)n;
 				}
 			| DROP FUNCTION IF_P EXISTS func_name func_args opt_drop_behavior
@@ -6458,15 +6459,16 @@ RemoveFuncStmt:
 					n->concurrent = false;
 					$$ = (Node *)n;
 				}
-			| DROP PROCEDURE IF_P EXISTS func_name func_args opt_drop_behavior
+			| DROP PROCEDURE IF_P EXISTS type_function_name opt_drop_behavior
 				{
 					DropStmt *n = makeNode(DropStmt);
 					n->removeType = OBJECT_FUNCTION;
-					n->objects = list_make1($5);
-					n->arguments = list_make1(extractArgTypes($6));
-					n->behavior = $7;
+					n->objects = list_make1(list_make1(makeString($5)));
+					n->arguments = NIL;
+					n->behavior = $6;
 					n->missing_ok = true;
 					n->concurrent = false;
+					n->flavor = TPG;
 					$$ = (Node *)n;
 				}
 		;

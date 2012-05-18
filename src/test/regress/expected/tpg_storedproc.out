@@ -29,3 +29,26 @@ INFO:  end
  
 (1 row)
 
+-- Create a couple of overloaded procedures
+create procedure overloaded_proc(@a text) as
+begin
+    print @a
+end
+create procedure overloaded_proc(@a int) as
+begin
+    print @a
+end
+--
+-- Test DROP PROCEDURE
+--
+-- Ambiguous: should fail
+drop procedure overloaded_proc;
+ERROR:  function overloaded_proc() is not unique
+HINT:  You might need to use DROP FUNCTION with an explicit list of parameter types.
+-- Should succeed.
+drop function overloaded_proc(text);
+-- This should succeed too.
+drop procedure overloaded_proc;
+-- no-op without an error
+drop procedure if exists overloaded_proc;
+NOTICE:  function overloaded_proc() does not exist, skipping

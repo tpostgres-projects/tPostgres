@@ -270,10 +270,15 @@ static ObjectPropertyType *get_object_property_data(Oid class_id);
  * We don't currently provide a function to release the locks acquired here;
  * typically, the lock must be held until commit to guard against a concurrent
  * drop operation.
+ *
+ * The parameter usenameonly only applies to the function objtype: if true, do
+ * not use the objargs and only use objname.  If multiple matching candidates
+ * are found then raise an error.
  */
 ObjectAddress
 get_object_address(ObjectType objtype, List *objname, List *objargs,
-				   Relation *relp, LOCKMODE lockmode, bool missing_ok)
+				   Relation *relp, LOCKMODE lockmode, bool missing_ok,
+				   bool usenameonly)
 {
 	ObjectAddress address;
 	ObjectAddress old_address = {InvalidOid, InvalidOid, 0};
@@ -340,8 +345,16 @@ get_object_address(ObjectType objtype, List *objname, List *objargs,
 				break;
 			case OBJECT_FUNCTION:
 				address.classId = ProcedureRelationId;
-				address.objectId =
-					LookupFuncNameTypeNames(objname, objargs, missing_ok);
+				if (usenameonly)
+				{
+					address.objectId =
+						LookupUnambiguousFuncName(objname, missing_ok);
+				}
+				else
+				{
+					address.objectId =
+						LookupFuncNameTypeNames(objname, objargs, missing_ok);
+				}
 				address.objectSubId = 0;
 				break;
 			case OBJECT_OPERATOR:

@@ -1567,6 +1567,56 @@ LookupFuncName(List *funcname, int nargs, const Oid *argtypes, bool noError)
 }
 
 /*
+ * LookupUnambiguousFuncName
+ *		Like LookupFuncName but for looking up a unique function based solely on
+ *		the name.
+ *
+ * If multiple candidates are found, raise an error.
+ */
+Oid
+LookupUnambiguousFuncName(List *funcname, bool noError)
+{
+	FuncCandidateList  clist, c;
+	int				   clist_len = 0;
+	int				   argcount = -1;
+
+	clist = FuncnameGetCandidates(funcname, argcount, NIL, false, false);
+		
+	c = clist;
+	while (c)
+	{
+		clist_len++;
+		c = c->next;
+	}
+
+	if (clist_len == 1)
+	{
+		return clist->oid;
+	}
+	else if (clist_len > 1)
+	{
+		ereport(ERROR,
+		        (errcode(ERRCODE_AMBIGUOUS_FUNCTION),
+		         errmsg("function %s is not unique",
+		                func_signature_string(funcname, argcount, NIL,
+		                                      NULL)),
+		         errhint("You might need to use DROP FUNCTION "
+		                 "with an explicit list of parameter types.")));
+	}
+	else
+	{
+		if (!noError)
+			ereport(ERROR,
+			        (errcode(ERRCODE_UNDEFINED_FUNCTION),
+			         errmsg("function %s does not exist",
+			                func_signature_string(funcname, argcount,
+			                                      NIL, NULL))));
+	}
+
+	return InvalidOid;
+}
+
+/*
  * LookupTypeNameOid
  *		Convenience routine to look up a type, silently accepting shell types
  */

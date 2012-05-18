@@ -87,7 +87,8 @@ ExecSecLabelStmt(SecLabelStmt *stmt)
 	 * guard against concurrent modifications.
 	 */
 	address = get_object_address(stmt->objtype, stmt->objname, stmt->objargs,
-								 &relation, ShareUpdateExclusiveLock, false);
+								 &relation, ShareUpdateExclusiveLock, false,
+								 false);
 
 	/* Require ownership of the target object. */
 	check_object_ownership(GetUserId(), stmt->objtype, address,

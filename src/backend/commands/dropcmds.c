@@ -71,7 +71,8 @@ RemoveObjects(DropStmt *stmt)
 									 objname, objargs,
 									 &relation,
 									 AccessExclusiveLock,
-									 stmt->missing_ok);
+		                             stmt->missing_ok,
+									 (stmt->flavor == TPG));
 
 		/* Issue NOTICE if supplied object was not found. */
 		if (!OidIsValid(address.objectId))

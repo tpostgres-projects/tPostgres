@@ -21,3 +21,27 @@ end
 
 select begin_blockdepth_check();
 select end_blockdepth_check();
+
+-- Create a couple of overloaded procedures
+create procedure overloaded_proc(@a text) as
+begin
+    print @a
+end
+
+create procedure overloaded_proc(@a int) as
+begin
+    print @a
+end
+
+--
+-- Test DROP PROCEDURE
+--
+
+-- Ambiguous: should fail
+drop procedure overloaded_proc;
+-- Should succeed.
+drop function overloaded_proc(text);
+-- This should succeed too.
+drop procedure overloaded_proc;
+-- no-op without an error
+drop procedure if exists overloaded_proc;

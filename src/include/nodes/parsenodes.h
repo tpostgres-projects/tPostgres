@@ -1902,6 +1902,16 @@ typedef struct AlterOpFamilyStmt
  * ----------------------
  */
 
+/*
+ * Distinguish between statements common to PostgreSQL and SQL Server but with
+ * differing behavior.
+ */
+typedef enum StmtFlavor
+{
+	PG,				/* PostgreSQL */
+	TPG				/* tPostgres */
+} StmtFlavor;
+
 typedef struct DropStmt
 {
 	NodeTag		type;
@@ -1911,6 +1921,7 @@ typedef struct DropStmt
 	DropBehavior behavior;		/* RESTRICT or CASCADE behavior */
 	bool		missing_ok;		/* skip error if object is missing? */
 	bool		concurrent;		/* drop index concurrently? */
+	StmtFlavor	flavor;			/* which flavor did the user request? */
 } DropStmt;
 
 /* ----------------------
