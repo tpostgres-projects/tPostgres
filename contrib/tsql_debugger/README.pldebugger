@@ -1,0 +1,67 @@
+PostgreSQL PL/TSQL Debugger API
+================================
+
+This module is a set of shared libraries which implement an API for
+debugging PL/TSQL functions on PostgreSQL 9.2 and above. The pgAdmin III
+project (http://www.pgadmin.org/) provides a client user interface as
+part of pgAdmin III v1.16.0 and above.
+
+Installation
+------------
+
+- Copy this directory to contrib/ in your PostgreSQL source tree.
+
+- Run 'make; make install'
+
+- Edit your postgresql.conf file, and modify the shared_preload_libraries config
+  option to look like:
+
+  shared_preload_libraries = '$libdir/plugins/plugin_tsql_debugger'
+
+- (Re)start PostgreSQL, run the pldbgapicore.sql and pltsqldbg.sql SQL
+  scripts in the database or databases that you wish to debug functions
+  in.
+
+Usage
+-----
+
+Connect pgAdmin to the database containing the functions you wish to debug.
+Right-click the function to debug, and select Debugging->Debug to execute and
+debug the function immediately, or select Debugging->Set Global Breakpoint to
+set a breakpoint on the function. This will cause the debugger to wait for
+another session (such as a backend servicing a web app) to execute the function
+and allow you to debug in-context.
+
+For further information, please see the pgAdmin documentation.
+
+Troubleshooting
+---------------
+
+The majority of problems we've encountered with the plugin are caused by
+failing to add (or incorrectly adding) the debugger plugin library to the
+shared_preload_libraries configuration directive in postgresql.conf (following
+which, the server *must* be restarted). This will prevent global breakpoints
+working on all platforms, and on some (notably Windows) may prevent the 
+pldbgapicore.sql script from executing correctly.
+
+Licence
+-------
+
+The pl/pgsql debugger API is released under the Artistic Licence.
+
+    http://www.opensource.org/licenses/artistic-license.php
+
+Portions Copyright (c) 2011-2012, TPOSTGRES.  All Rights Reserved.
+Copyright (c) 2004-2010 EnterpriseDB Corporation. All Rights Reserved.
+
+PL/TSQL Contact
+---------------
+
+Denis Lussier (denisl@openscg.com)
+Affan Salman (affan.salman@gmail.com)
+
+PL/pgSQL Contact
+----------------
+
+Korry Douglas (korry.douglas@enterprisedb.com)
+Dave Page (dave.page@enterprisedb.com)
