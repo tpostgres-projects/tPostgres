@@ -1,0 +1,55 @@
+                  tPostgres Installation from Source Code
+
+   This document describes the installation of PostgreSQL using the source
+   code distribution.
+     __________________________________________________________________
+
+The process of installing tPostgres from source is based on PostgreSQL.
+For more information, see:
+
+    http://www.postgresql.org/docs/current/static/installation.html
+
+An example installation session is shown below:
+
+./configure
+gmake
+su
+gmake install
+adduser postgres
+mkdir /usr/local/pgsql/data
+chown postgres /usr/local/pgsql/data
+su - postgres
+/usr/local/pgsql/bin/initdb -D /usr/local/pgsql/data
+/usr/local/pgsql/bin/postgres -D /usr/local/pgsql/data >logfile 2>&1 &
+/usr/local/pgsql/bin/createdb test
+/usr/local/pgsql/bin/psql test
+
+If you need to build the TSQL debugger contrib module, see the following
+additional steps:
+________________________________________________________________________
+
+  *n?x platforms
+  --------------
+
+      - Run "make && make install"
+      - cp <tPostgres-root>/contrib/tsql_debugger/README.pldebugger as
+        README.pltsqldebugger to the destination doc dist directory.
+
+  Windows platforms
+  -----------------
+
+      After completing the tPostgres build and install, make sure the
+      paths in tsql_debugger/settings.projinc[.in] are setup correctly.
+
+      From the build shell CLI:
+
+      - Build the project using vcbuild:
+        $ vcbuild /useenv pldebugger.proj "Release|x64"
+      - Copy files to the target directory (assuming "C:\tPostgres" as
+        install root)
+        $ COPY targetinfo.dll C:\tPostgres\lib\
+        $ COPY pldbgapi.dll C:\tPostgres\lib\
+        $ MKDIR C:\tPostgres\lib\plugins
+        $ COPY plugin_tsql*.dll C:\tPostgres\lib\plugins\
+        $ COPY *.sql C:\tPostgres\share\contrib\
+________________________________________________________________________
